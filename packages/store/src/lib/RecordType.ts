@@ -1,15 +1,13 @@
-import { structuredClone } from '@tldraw/utils'
-import { nanoid } from 'nanoid'
-import { IdOf, OmitMeta, UnknownRecord } from './BaseRecord'
+import { Expand, objectMapEntries, structuredClone, uniqueId } from '@tldraw/utils'
+import { IdOf, UnknownRecord } from './BaseRecord'
 import { StoreValidator } from './Store'
-import { Migrations } from './migrate'
 
 export type RecordTypeRecord<R extends RecordType<any, any>> = ReturnType<R['create']>
 
 /**
  * Defines the scope of the record
  *
- * instance: The record belongs to a single instance of the store. It should not be synced, and any persistence logic should 'de-instance-ize' the record before persisting it, and apply the reverse when rehydrating.
+ * session: The record belongs to a single instance of the store. It should not be synced, and any persistence logic should 'de-instance-ize' the record before persisting it, and apply the reverse when rehydrating.
  * document: The record is persisted and synced. It is available to all store instances.
  * presence: The record belongs to a single instance of the store. It may be synced to other instances, but other instances should not make changes to it. It should not be persisted.
  *
@@ -27,10 +25,10 @@ export class RecordType<
 	R extends UnknownRecord,
 	RequiredProperties extends keyof Omit<R, 'id' | 'typeName'>,
 > {
-	readonly createDefaultProperties: () => Exclude<OmitMeta<R>, RequiredProperties>
-	readonly migrations: Migrations
-	readonly validator: StoreValidator<R> | { validate: (r: unknown) => R }
-
+	readonly createDefaultProperties: () => Exclude<Omit<R, 'id' | 'typeName'>, RequiredProperties>
+	readonly validator: StoreValidator<R>
+	readonly ephemeralKeys?: { readonly [K in Exclude<keyof R, 'id' | 'typeName'>]: boolean }
+	readonly ephemeralKeySet: ReadonlySet<string>
 	readonly scope: RecordScope
 
 	constructor(
@@ -42,16 +40,28 @@ export class RecordType<
 		 */
 		public readonly typeName: R['typeName'],
 		config: {
-			readonly createDefaultProperties: () => Exclude<OmitMeta<R>, RequiredProperties>
-			readonly migrations: Migrations
-			readonly validator?: StoreValidator<R> | { validate: (r: unknown) => R }
+			// eslint-disable-next-line @typescript-eslint/method-signature-style
+			readonly createDefaultProperties: () => Exclude<
+				Omit<R, 'id' | 'typeName'>,
+				RequiredProperties
+			>
+			readonly validator?: StoreValidator<R>
 			readonly scope?: RecordScope
+			readonly ephemeralKeys?: { readonly [K in Exclude<keyof R, 'id' | 'typeName'>]: boolean }
 		}
 	) {
 		this.createDefaultProperties = config.createDefaultProperties
-		this.migrations = config.migrations
 		this.validator = config.validator ?? { validate: (r: unknown) => r as R }
 		this.scope = config.scope ?? 'document'
+		this.ephemeralKeys = config.ephemeralKeys
+
+		const ephemeralKeySet = new Set<string>()
+		if (config.ephemeralKeys) {
+			for (const [key, isEphemeral] of objectMapEntries(config.ephemeralKeys)) {
+				if (isEphemeral) ephemeralKeySet.add(key)
+			}
+		}
+		this.ephemeralKeySet = ephemeralKeySet
 	}
 
 	/**
@@ -60,7 +70,9 @@ export class RecordType<
 	 * @param properties - The properties of the record.
 	 * @returns The new record.
 	 */
-	create(properties: Pick<R, RequiredProperties> & Omit<Partial<R>, RequiredProperties>): R {
+	create(
+		properties: Expand<Pick<R, RequiredProperties> & Omit<Partial<R>, RequiredProperties>>
+	): R {
 		const result = { ...this.createDefaultProperties(), id: this.createId() } as any
 
 		for (const [k, v] of Object.entries(properties)) {
@@ -98,7 +110,7 @@ export class RecordType<
 	 * @public
 	 */
 	createId(customUniquePart?: string): IdOf<R> {
-		return (this.typeName + ':' + (customUniquePart ?? nanoid())) as IdOf<R>
+		return (this.typeName + ':' + (customUniquePart ?? uniqueId())) as IdOf<R>
 	}
 
 	/**
@@ -144,7 +156,7 @@ export class RecordType<
 	 * @param record - The record to check.
 	 * @returns Whether the record is an instance of this record type.
 	 */
-	isInstance = (record?: UnknownRecord): record is R => {
+	isInstance(record?: UnknownRecord): record is R {
 		return record?.typeName === this.typeName
 	}
 
@@ -180,7 +192,7 @@ export class RecordType<
 	 * const deadAuthorType = authorType.withDefaultProperties({ living: false })
 	 * ```
 	 *
-	 * @param fn - A function that returns the default properties of the new RecordType.
+	 * @param createDefaultProperties - A function that returns the default properties of the new RecordType.
 	 * @returns The new RecordType.
 	 */
 	withDefaultProperties<DefaultProps extends Omit<Partial<R>, 'typeName' | 'id'>>(
@@ -188,9 +200,9 @@ export class RecordType<
 	): RecordType<R, Exclude<RequiredProperties, keyof DefaultProps>> {
 		return new RecordType<R, Exclude<RequiredProperties, keyof DefaultProps>>(this.typeName, {
 			createDefaultProperties: createDefaultProperties as any,
-			migrations: this.migrations,
 			validator: this.validator,
 			scope: this.scope,
+			ephemeralKeys: this.ephemeralKeys,
 		})
 	}
 
@@ -198,7 +210,10 @@ export class RecordType<
 	 * Check that the passed in record passes the validations for this type. Returns its input
 	 * correctly typed if it does, but throws an error otherwise.
 	 */
-	validate(record: unknown): R {
+	validate(record: unknown, recordBefore?: R): R {
+		if (recordBefore && this.validator.validateUsingKnownGoodVersion) {
+			return this.validator.validateUsingKnownGoodVersion(recordBefore, record)
+		}
 		return this.validator.validate(record)
 	}
 }
@@ -218,16 +233,16 @@ export class RecordType<
 export function createRecordType<R extends UnknownRecord>(
 	typeName: R['typeName'],
 	config: {
-		migrations?: Migrations
 		validator?: StoreValidator<R>
 		scope: RecordScope
+		ephemeralKeys?: { readonly [K in Exclude<keyof R, 'id' | 'typeName'>]: boolean }
 	}
 ): RecordType<R, keyof Omit<R, 'id' | 'typeName'>> {
 	return new RecordType<R, keyof Omit<R, 'id' | 'typeName'>>(typeName, {
 		createDefaultProperties: () => ({}) as any,
-		migrations: config.migrations ?? { currentVersion: 0, firstVersion: 0, migrators: {} },
 		validator: config.validator,
 		scope: config.scope,
+		ephemeralKeys: config.ephemeralKeys,
 	})
 }
 

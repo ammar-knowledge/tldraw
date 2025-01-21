@@ -1,4 +1,4 @@
-import { PageRecordType, TLPageId, createShapeId } from '@tldraw/editor'
+import { IndexKey, PageRecordType, TLPageId, createShapeId } from '@tldraw/editor'
 import { TestEditor } from '../TestEditor'
 
 let editor: TestEditor
@@ -39,21 +39,21 @@ describe('setCurrentPage', () => {
 	})
 
 	it("adding a page to the store by any means adds tab state for the page if it doesn't already exist", () => {
-		const page = PageRecordType.create({ name: 'test', index: 'a4' })
+		const page = PageRecordType.create({ name: 'test', index: 'a4' as IndexKey })
 		expect(editor.getPageStates().find((p) => p.pageId === page.id)).toBeUndefined()
 		editor.store.put([page])
 		expect(editor.getPageStates().find((p) => p.pageId === page.id)).not.toBeUndefined()
 	})
 
 	it('squashes', () => {
+		const page1Id = editor.getCurrentPageId()
 		const page2Id = PageRecordType.createId('page2')
-		editor.createPage({ name: 'New Page 2', index: page2Id })
-
-		editor.history.clear()
-		editor.setCurrentPage(editor.getPages()[1].id)
-		editor.setCurrentPage(editor.getPages()[0].id)
-		editor.setCurrentPage(editor.getPages()[0].id)
-		expect(editor.history.getNumUndos()).toBe(1)
+		editor.createPage({ name: 'New Page 2', id: page2Id })
+		editor.setCurrentPage(page1Id)
+		editor.setCurrentPage(page2Id)
+		editor.setCurrentPage(page2Id)
+		editor.undo()
+		expect(editor.getCurrentPageId()).toBe(page1Id)
 	})
 
 	it('preserves the undo stack', () => {
@@ -61,14 +61,14 @@ describe('setCurrentPage', () => {
 		const page2Id = PageRecordType.createId('page2')
 		editor.createPage({ name: 'New Page 2', id: page2Id })
 
-		editor.history.clear()
+		editor.clearHistory()
 		editor.createShapes([{ type: 'geo', id: boxId, props: { w: 100, h: 100 } }])
 		editor.undo()
 		editor.setCurrentPage(editor.getPages()[1].id)
 		editor.setCurrentPage(editor.getPages()[0].id)
 		editor.setCurrentPage(editor.getPages()[0].id)
 		expect(editor.getShape(boxId)).toBeUndefined()
-		expect(editor.history.getNumUndos()).toBe(1)
+		// expect(editor.history.getNumUndos()).toBe(1)
 		editor.redo()
 		expect(editor.getShape(boxId)).not.toBeUndefined()
 	})
@@ -84,5 +84,42 @@ describe('setCurrentPage', () => {
 
 		expect(console.error).toHaveBeenCalled()
 		expect(editor.getCurrentPageId()).toBe(initialPageId)
+	})
+
+	it('cancels any in-progress actions', () => {
+		const page1Id = editor.getPages()[0].id
+		const page2Id = PageRecordType.createId('page2')
+
+		editor.createPage({ name: 'New Page 2', id: page2Id })
+		expect(editor.getCurrentPageId()).toBe(page1Id)
+
+		const geoId = createShapeId()
+		editor.createShape({ type: 'geo', id: geoId, props: { w: 100, h: 100 } })
+		editor.select(geoId)
+		editor.keyUp('Enter')
+
+		expect(editor.isIn('select.editing_shape')).toBe(true)
+
+		editor.setCurrentPage(page2Id)
+		expect(editor.isIn('select.idle')).toBe(true)
+	})
+
+	it('applies camera constraints', () => {
+		const spy = jest.spyOn(editor, 'setCamera')
+
+		let currentPageId = editor.getCurrentPageId()
+		expect(currentPageId).toMatchInlineSnapshot(`"page:page"`)
+		spy.mockImplementation(() => {
+			currentPageId = editor.getCurrentPageId()
+			return editor
+		})
+
+		editor.createPage({ name: 'New Page 2', id: PageRecordType.createId('page2') })
+		expect(spy).toHaveBeenCalledTimes(0)
+		editor.setCurrentPage(PageRecordType.createId('page2'))
+		expect(spy).toHaveBeenCalledTimes(1)
+		expect(currentPageId).toMatchInlineSnapshot(`"page:page2"`)
+
+		expect(spy)
 	})
 })

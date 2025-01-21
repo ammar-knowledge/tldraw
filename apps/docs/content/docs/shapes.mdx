@@ -25,7 +25,7 @@ The editor's core shapes are shapes that are built in and always present. At the
 
 ### Default shapes
 
-The default shapes are all of the shapes that are included by default in the [Tldraw](?) component, such as the [TLArrowShape](?) or [TLDrawShape](?). They are exported from the `@tldraw/tldraw` library as [defaultShapeUtils](?).
+The default shapes are all of the shapes that are included by default in the [Tldraw](?) component, such as the [TLArrowShape](?) or [TLDrawShape](?). They are exported from the `tldraw` library as [defaultShapeUtils](?).
 
 ### Custom shapes
 
@@ -39,7 +39,7 @@ Shapes are just records (JSON objects) that sit in the [store](/docs/editor#Stor
 {
     "parentId": "page:somePage",
     "id": "shape:someId",
-    "typeName": "shape"
+    "typeName": "shape",
     "type": "geo",
     "x": 106,
     "y": 294,
@@ -89,14 +89,14 @@ While tldraw's shapes themselves are simple JSON objects, we use [ShapeUtil](?) 
 
 You can create your own custom shapes. In the examples below, we will create a custom "card" shape. It'll be a simple rectangle with some text inside.
 
-> For an example of how to create custom shapes, see our [custom shapes example](https://github.com/tldraw/tldraw/tree/main/apps/examples/src/examples/CustomConfigExample).
+> For an example of how to create custom shapes, see our [custom shapes example](/examples/shapes/tools/custom-shape).
 
 ### Shape type
 
 In tldraw's data model, each shape is represented by a JSON object. Let's first create a type that describes what this object will look like.
 
 ```ts
-import { TLBaseShape } from '@tldraw/tldraw'
+import { TLBaseShape } from 'tldraw'
 
 type CardShape = TLBaseShape<'card', { w: number; h: number }>
 ```
@@ -112,7 +112,7 @@ While tldraw's shapes themselves are simple JSON objects, we use [ShapeUtil](?) 
 Let's create a [ShapeUtil](?) class for the shape.
 
 ```tsx
-import { HTMLContainer, ShapeUtil } from '@tldraw/tldraw'
+import { HTMLContainer, ShapeUtil } from 'tldraw'
 
 class CardShapeUtil extends ShapeUtil<CardShape> {
 	static override type = 'card' as const
@@ -124,7 +124,7 @@ class CardShapeUtil extends ShapeUtil<CardShape> {
 		}
 	}
 
-	getGeometry(shape: ICardShape) {
+	getGeometry(shape: CardShape) {
 		return new Rectangle2d({
 			width: shape.props.w,
 			height: shape.props.h,
@@ -151,7 +151,7 @@ We still have work to do on the `CardShapeUtil` class, but we'll come back to it
 We pass an array of our shape utils into the [Tldraw](?) component's `shapeUtils` prop.
 
 ```tsx
-const MyCustomShapes = [MyCardShape]
+const MyCustomShapes = [CardShapeUtil]
 
 export default function () {
 	return (
@@ -239,4 +239,6 @@ You can turn on `pointer-events` to allow users to interact inside of the shape.
 
 You can make shapes "editable" to help decide when they're interactive or not.
 
-...and more!
+### Migrations
+
+You can add migrations for your shape props by adding a `migrations` property to your shape's util class. See [the persistence docs](/docs/persistence#Shape-props-migrations) for more information.

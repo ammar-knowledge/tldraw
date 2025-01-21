@@ -1,7 +1,7 @@
 import { TLShapeId, useEditor } from '@tldraw/editor'
 import { useCallback } from 'react'
 import { TLCopyType, copyAs } from '../../utils/export/copyAs'
-import { useToasts } from './useToastsProvider'
+import { useToasts } from '../context/toasts'
 import { useTranslation } from './useTranslation/useTranslation'
 
 /** @public */
@@ -12,10 +12,10 @@ export function useCopyAs() {
 
 	return useCallback(
 		(ids: TLShapeId[], format: TLCopyType = 'svg') => {
-			copyAs(editor, ids, format).catch(() => {
+			copyAs(editor, ids, { format }).catch(() => {
 				addToast({
 					id: 'copy-fail',
-					icon: 'warning-triangle',
+					severity: 'warning',
 					title: msg('toast.error.copy-fail.title'),
 					description: msg('toast.error.copy-fail.desc'),
 				})

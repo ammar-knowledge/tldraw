@@ -1,4 +1,4 @@
-import { Box, StateNode, TLEventHandlers, TLPointerEventInfo } from '@tldraw/editor'
+import { Box, StateNode, TLPointerEventInfo } from '@tldraw/editor'
 
 export class ZoomBrushing extends StateNode {
 	static override id = 'zoom_brushing'
@@ -7,24 +7,24 @@ export class ZoomBrushing extends StateNode {
 
 	zoomBrush = new Box()
 
-	override onEnter = (info: TLPointerEventInfo & { onInteractionEnd: string }) => {
+	override onEnter(info: TLPointerEventInfo & { onInteractionEnd: string }) {
 		this.info = info
 		this.update()
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.editor.updateInstanceState({ zoomBrush: null })
 	}
 
-	override onPointerMove = () => {
+	override onPointerMove() {
 		this.update()
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onPointerUp() {
 		this.complete()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
@@ -48,13 +48,13 @@ export class ZoomBrushing extends StateNode {
 		if (zoomBrush.width < threshold && zoomBrush.height < threshold) {
 			const point = this.editor.inputs.currentScreenPoint
 			if (this.editor.inputs.altKey) {
-				this.editor.zoomOut(point, { duration: 220 })
+				this.editor.zoomOut(point, { animation: { duration: 220 } })
 			} else {
-				this.editor.zoomIn(point, { duration: 220 })
+				this.editor.zoomIn(point, { animation: { duration: 220 } })
 			}
 		} else {
-			const zoomLevel = this.editor.inputs.altKey ? this.editor.getZoomLevel() / 2 : undefined
-			this.editor.zoomToBounds(zoomBrush, zoomLevel, { duration: 220 })
+			const targetZoom = this.editor.inputs.altKey ? this.editor.getZoomLevel() / 2 : undefined
+			this.editor.zoomToBounds(zoomBrush, { targetZoom, animation: { duration: 220 } })
 		}
 
 		this.parent.transition('idle', this.info)

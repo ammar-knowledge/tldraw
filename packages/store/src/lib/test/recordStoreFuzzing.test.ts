@@ -328,26 +328,15 @@ const NUM_OPS = 200
 function runTest(seed: number) {
 	const store = new Store({
 		props: {},
-		schema: StoreSchema.create<Book | Author>(
-			{
-				book: Book,
-				author: Author,
-			},
-			{
-				snapshotMigrations: {
-					currentVersion: 0,
-					firstVersion: 0,
-					migrators: {},
-				},
-			}
-		),
+		schema: StoreSchema.create<Book | Author>({
+			book: Book,
+			author: Author,
+		}),
 	})
-	store.onBeforeDelete = (record) => {
-		if (record.typeName === 'author') {
-			const books = store.query.index('book', 'authorId').get().get(record.id)
-			if (books) store.remove([...books])
-		}
-	}
+	store.sideEffects.registerBeforeDeleteHandler('author', (record) => {
+		const books = store.query.index('book', 'authorId').get().get(record.id)
+		if (books) store.remove([...books])
+	})
 	const getRandomNumber = rng(seed)
 	const authorNameIndex = store.query.index('author', 'name')
 	const authorIdIndex = store.query.index('book', 'authorId')

@@ -3,7 +3,7 @@ import { Box, Editor, TLFrameShape, TLShapeId, TLShapePartial, Vec, compact } fr
 /**
  * Remove a frame.
  *
- * @param editor - tlraw editor instance.
+ * @param editor - tldraw editor instance.
  * @param ids - Ids of the frames you wish to remove.
  *
  * @public
@@ -17,7 +17,7 @@ export function removeFrame(editor: Editor, ids: TLShapeId[]) {
 	if (!frames.length) return
 
 	const allChildren: TLShapeId[] = []
-	editor.batch(() => {
+	editor.run(() => {
 		frames.map((frame) => {
 			const children = editor.getSortedChildIdsForParent(frame.id)
 			if (children.length) {
@@ -66,7 +66,7 @@ export function fitFrameToContent(editor: Editor, id: TLShapeId, opts = {} as { 
 	if (dx === 0 && dy === 0 && frame.props.w === w && frame.props.h === h) return
 
 	const diff = new Vec(dx, dy).rot(frame.rotation)
-	editor.batch(() => {
+	editor.run(() => {
 		const changes: TLShapePartial[] = childIds.map((child) => {
 			const shape = editor.getShape(child)!
 			return {

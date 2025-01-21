@@ -1,6 +1,7 @@
-import { HALF_PI, PI, TLArrowInfo, Vec, VecLike, intersectCircleCircle } from '@tldraw/editor'
+import { HALF_PI, PI, Vec, VecLike, intersectCircleCircle } from '@tldraw/editor'
+import { TLArrowInfo } from './arrow-types'
 
-type TLArrowPointsInfo = {
+interface TLArrowPointsInfo {
 	point: VecLike
 	int: VecLike
 }
@@ -33,6 +34,10 @@ function getArrowPoints(
 					: ints[0]
 	}
 
+	if (Vec.IsNaN(P0)) {
+		P0 = info.start.point
+	}
+
 	return {
 		point: PT,
 		int: P0,
@@ -50,7 +55,7 @@ function getTriangleHead({ point, int }: TLArrowPointsInfo) {
 	const PL = Vec.RotWith(int, point, PI / 6)
 	const PR = Vec.RotWith(int, point, -PI / 6)
 
-	return `M ${PL.x} ${PL.y} L ${point.x} ${point.y} L ${PR.x} ${PR.y} Z`
+	return `M ${PL.x} ${PL.y} L ${PR.x} ${PR.y} L ${point.x} ${point.y} Z`
 }
 
 function getInvertedTriangleHead({ point, int }: TLArrowPointsInfo) {
@@ -78,7 +83,7 @@ function getDiamondHead({ point, int }: TLArrowPointsInfo) {
 	const PQ = Vec.Lrp(PL, PR, 0.5)
 	PQ.add(Vec.Sub(PQ, point))
 
-	return `M ${PQ.x} ${PQ.y} L ${PL.x} ${PL.y} ${point.x} ${point.y} L ${PR.x} ${PR.y} Z`
+	return `M ${PQ.x} ${PQ.y} L ${PR.x} ${PR.y} ${point.x} ${point.y} L ${PL.x} ${PL.y} Z`
 }
 
 function getSquareHead({ int, point }: TLArrowPointsInfo) {

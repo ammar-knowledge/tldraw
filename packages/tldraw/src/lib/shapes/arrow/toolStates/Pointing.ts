@@ -1,4 +1,4 @@
-import { StateNode, TLArrowShape, TLEventHandlers, createShapeId } from '@tldraw/editor'
+import { StateNode, TLArrowShape, createShapeId, maybeSnapToGrid } from '@tldraw/editor'
 
 export class Pointing extends StateNode {
 	static override id = 'pointing'
@@ -7,12 +7,16 @@ export class Pointing extends StateNode {
 
 	markId = ''
 
-	override onEnter = () => {
+	override onEnter() {
+		this.markId = ''
 		this.didTimeout = false
 
 		const target = this.editor.getShapeAtPoint(this.editor.inputs.currentPagePoint, {
 			filter: (targetShape) => {
-				return !targetShape.isLocked && this.editor.getShapeUtil(targetShape).canBind(targetShape)
+				return (
+					!targetShape.isLocked &&
+					this.editor.canBindShapes({ fromShape: 'arrow', toShape: targetShape, binding: 'arrow' })
+				)
 			},
 			margin: 0,
 			hitInside: true,
@@ -28,13 +32,13 @@ export class Pointing extends StateNode {
 		this.startPreciseTimeout()
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.shape = undefined
 		this.editor.setHintingShapes([])
 		this.clearPreciseTimeout()
 	}
 
-	override onPointerMove: TLEventHandlers['onPointerMove'] = () => {
+	override onPointerMove() {
 		if (this.editor.inputs.isDragging) {
 			if (!this.shape) {
 				this.createArrowShape()
@@ -42,30 +46,32 @@ export class Pointing extends StateNode {
 
 			if (!this.shape) throw Error(`expected shape`)
 
+			// const initialEndHandle = this.editor.getShapeHandles(this.shape)!.find((h) => h.id === 'end')!
 			this.updateArrowShapeEndHandle()
 
 			this.editor.setCurrentTool('select.dragging_handle', {
 				shape: this.shape,
-				handle: this.editor.getShapeHandles(this.shape)!.find((h) => h.id === 'end')!,
+				handle: { id: 'end', type: 'vertex', index: 'a3', x: 0, y: 0 },
 				isCreating: true,
+				creatingMarkId: this.markId || undefined,
 				onInteractionEnd: 'arrow',
 			})
 		}
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onPointerUp() {
 		this.cancel()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.cancel()
 	}
 
-	override onInterrupt: TLEventHandlers['onInterrupt'] = () => {
+	override onInterrupt() {
 		this.cancel()
 	}
 
@@ -83,17 +89,17 @@ export class Pointing extends StateNode {
 
 		const id = createShapeId()
 
-		this.markId = `creating:${id}`
-		this.editor.mark(this.markId)
-
-		this.editor.createShapes<TLArrowShape>([
-			{
-				id,
-				type: 'arrow',
-				x: originPagePoint.x,
-				y: originPagePoint.y,
+		this.markId = this.editor.markHistoryStoppingPoint(`creating_arrow:${id}`)
+		const newPoint = maybeSnapToGrid(originPagePoint, this.editor)
+		this.editor.createShape<TLArrowShape>({
+			id,
+			type: 'arrow',
+			x: newPoint.x,
+			y: newPoint.y,
+			props: {
+				scale: this.editor.user.getIsDynamicResizeMode() ? 1 / this.editor.getZoomLevel() : 1,
 			},
-		])
+		})
 
 		const shape = this.editor.getShape<TLArrowShape>(id)
 		if (!shape) throw Error(`expected shape`)
@@ -111,11 +117,7 @@ export class Pointing extends StateNode {
 		})
 
 		if (change) {
-			const startTerminal = change.props?.start
-			if (startTerminal?.type === 'binding') {
-				this.editor.setHintingShapes([startTerminal.boundShapeId])
-			}
-			this.editor.updateShapes([change], { squashing: true })
+			this.editor.updateShapes([change])
 		}
 
 		// Cache the current shape after those changes
@@ -130,9 +132,20 @@ export class Pointing extends StateNode {
 		const handles = this.editor.getShapeHandles(shape)
 		if (!handles) throw Error(`expected handles for arrow`)
 
-		const shapeWithOutEndOffset = {
-			...shape,
-			props: { ...shape.props, end: { ...shape.props.end, x: 0, y: 0 } },
+		// start update
+		{
+			const util = this.editor.getShapeUtil<TLArrowShape>('arrow')
+			const initial = this.shape
+			const startHandle = handles.find((h) => h.id === 'start')!
+			const change = util.onHandleDrag?.(shape, {
+				handle: { ...startHandle, x: 0, y: 0 },
+				isPrecise: this.didTimeout, // sure about that?
+				initial: initial,
+			})
+
+			if (change) {
+				this.editor.updateShapes([change])
+			}
 		}
 
 		// end update
@@ -141,34 +154,14 @@ export class Pointing extends StateNode {
 			const initial = this.shape
 			const point = this.editor.getPointInShapeSpace(shape, this.editor.inputs.currentPagePoint)
 			const endHandle = handles.find((h) => h.id === 'end')!
-			const change = util.onHandleDrag?.(shapeWithOutEndOffset, {
+			const change = util.onHandleDrag?.(this.editor.getShape(shape)!, {
 				handle: { ...endHandle, x: point.x, y: point.y },
 				isPrecise: false, // sure about that?
 				initial: initial,
 			})
 
 			if (change) {
-				const endTerminal = change.props?.end
-				if (endTerminal?.type === 'binding') {
-					this.editor.setHintingShapes([endTerminal.boundShapeId])
-				}
-				this.editor.updateShapes([change], { squashing: true })
-			}
-		}
-
-		// start update
-		{
-			const util = this.editor.getShapeUtil<TLArrowShape>('arrow')
-			const initial = this.shape
-			const startHandle = handles.find((h) => h.id === 'start')!
-			const change = util.onHandleDrag?.(shapeWithOutEndOffset, {
-				handle: { ...startHandle, x: 0, y: 0 },
-				isPrecise: this.didTimeout, // sure about that?
-				initial: initial,
-			})
-
-			if (change) {
-				this.editor.updateShapes([change], { squashing: true })
+				this.editor.updateShapes([change])
 			}
 		}
 
@@ -179,7 +172,7 @@ export class Pointing extends StateNode {
 	private preciseTimeout = -1
 	private didTimeout = false
 	private startPreciseTimeout() {
-		this.preciseTimeout = window.setTimeout(() => {
+		this.preciseTimeout = this.editor.timers.setTimeout(() => {
 			if (!this.getIsActive()) return
 			this.didTimeout = true
 		}, 320)

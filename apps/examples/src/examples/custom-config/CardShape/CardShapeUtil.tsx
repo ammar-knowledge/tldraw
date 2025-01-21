@@ -1,12 +1,12 @@
+import { useState } from 'react'
 import {
 	HTMLContainer,
 	Rectangle2d,
 	ShapeUtil,
-	TLOnResizeHandler,
+	TLResizeInfo,
 	getDefaultColorTheme,
 	resizeBox,
-} from '@tldraw/tldraw'
-import { useState } from 'react'
+} from 'tldraw'
 import { cardShapeMigrations } from './card-shape-migrations'
 import { cardShapeProps } from './card-shape-props'
 import { ICardShape } from './card-shape-types'
@@ -21,9 +21,12 @@ export class CardShapeUtil extends ShapeUtil<ICardShape> {
 	static override migrations = cardShapeMigrations
 
 	// [3]
-	override isAspectRatioLocked = (_shape: ICardShape) => false
-	override canResize = (_shape: ICardShape) => true
-	override canBind = (_shape: ICardShape) => true
+	override isAspectRatioLocked(_shape: ICardShape) {
+		return false
+	}
+	override canResize(_shape: ICardShape) {
+		return true
+	}
 
 	// [4]
 	getDefaultProps(): ICardShape['props'] {
@@ -84,7 +87,7 @@ export class CardShapeUtil extends ShapeUtil<ICardShape> {
 	}
 
 	// [8]
-	override onResize: TLOnResizeHandler<ICardShape> = (shape, info) => {
+	override onResize(shape: ICardShape, info: TLResizeInfo<ICardShape>) {
 		return resizeBox(shape, info)
 	}
 }

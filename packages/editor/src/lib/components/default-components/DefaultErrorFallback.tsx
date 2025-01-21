@@ -1,27 +1,33 @@
-import { useValue } from '@tldraw/state'
+import { useValue } from '@tldraw/state-react'
+import { noop } from '@tldraw/utils'
 import classNames from 'classnames'
 import { ComponentType, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Editor } from '../../editor/Editor'
-import { EditorContext } from '../../hooks/useEditor'
+import { EditorProvider } from '../../hooks/useEditor'
+import { useEditorComponents } from '../../hooks/useEditorComponents'
 import { hardResetEditor } from '../../utils/hardResetEditor'
 import { refreshPage } from '../../utils/refreshPage'
-import { Canvas } from '../Canvas'
 import { ErrorBoundary } from '../ErrorBoundary'
 
 const BASE_ERROR_URL = 'https://github.com/tldraw/tldraw/issues/new'
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-function noop() {}
-
 /** @public */
 export type TLErrorFallbackComponent = ComponentType<{ error: unknown; editor?: Editor }>
 
-/** @public */
+/** @public @react */
 export const DefaultErrorFallback: TLErrorFallbackComponent = ({ error, editor }) => {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const [shouldShowError, setShouldShowError] = useState(process.env.NODE_ENV === 'development')
 	const [didCopy, setDidCopy] = useState(false)
 	const [shouldShowResetConfirmation, setShouldShowResetConfirmation] = useState(false)
+
+	let Canvas: React.ComponentType | null = null
+	try {
+		const components = useEditorComponents()
+		Canvas = components.Canvas ?? null
+	} catch {
+		// allow this to fail silently
+	}
 
 	const errorMessage = error instanceof Error ? error.message : String(error)
 	const errorStack = error instanceof Error ? error.stack : null
@@ -69,24 +75,26 @@ export const DefaultErrorFallback: TLErrorFallbackComponent = ({ error, editor }
 
 		// if we can't find a theme class from the app or from a parent, we have
 		// to fall back on using a media query:
-		setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+		if (typeof window !== 'undefined' && 'matchMedia' in window) {
+			setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+		}
 	}, [isDarkModeFromApp])
 
 	useEffect(() => {
 		if (didCopy) {
-			const timeout = setTimeout(() => {
+			const timeout = editor?.timers.setTimeout(() => {
 				setDidCopy(false)
 			}, 2000)
 			return () => clearTimeout(timeout)
 		}
-	}, [didCopy])
+	}, [didCopy, editor])
 
 	const copyError = () => {
 		const textarea = document.createElement('textarea')
 		textarea.value = errorStack ?? errorMessage
 		document.body.appendChild(textarea)
 		textarea.select()
-		// eslint-disable-next-line deprecation/deprecation
+		// eslint-disable-next-line @typescript-eslint/no-deprecated
 		document.execCommand('copy')
 		textarea.remove()
 		setDidCopy(true)
@@ -134,11 +142,9 @@ My browser: ${navigator.userAgent}`
 				// not a big deal if it doesn't work - in that case we just have
 				// a plain grey background.
 				<ErrorBoundary onError={noop} fallback={() => null}>
-					<EditorContext.Provider value={editor}>
-						<div className="tl-overlay tl-error-boundary__canvas">
-							<Canvas />
-						</div>
-					</EditorContext.Provider>
+					<EditorProvider editor={editor}>
+						<div className="tl-overlay tl-error-boundary__canvas">{Canvas ? <Canvas /> : null}</div>
+					</EditorProvider>
 				</ErrorBoundary>
 			)}
 			<div
@@ -159,19 +165,29 @@ My browser: ${navigator.userAgent}`
 					</>
 				) : (
 					<>
-						<h2>Something&apos;s gone wrong.</h2>
+						<h2>Something went wrong</h2>
+						<p>Please refresh the page to continue.</p>
 						<p>
-							Sorry, we encountered an error. Please refresh the page to continue. If you keep
-							seeing this error, you can <a href={url.toString()}>create a GitHub issue</a> or{' '}
-							<a href="https://discord.gg/Cq6cPsTfNy">ask for help on Discord</a>.
+							If you keep seeing this screen, you can create a{' '}
+							<a href={url.toString()}>GitHub issue</a> or ask for help on{' '}
+							<a href="https://discord.gg/Cq6cPsTfNy">Discord</a>. If you are still stuck, you can
+							reset the tldraw data on your machine. This may erase the project you were working on,
+							so try to get help first.
 						</p>
 						{shouldShowError && (
-							<div className="tl-error-boundary__content__error">
-								<pre>
-									<code>{errorStack ?? errorMessage}</code>
-								</pre>
-								<button onClick={copyError}>{didCopy ? 'Copied!' : 'Copy'}</button>
-							</div>
+							<>
+								Message:
+								<h4>
+									<code>{errorMessage}</code>
+								</h4>
+								Stack trace:
+								<div className="tl-error-boundary__content__error">
+									<pre>
+										<code>{errorStack ?? errorMessage}</code>
+									</pre>
+									<button onClick={copyError}>{didCopy ? 'Copied!' : 'Copy'}</button>
+								</div>
+							</>
 						)}
 						<div className="tl-error-boundary__content__actions">
 							<button onClick={() => setShouldShowError(!shouldShowError)}>

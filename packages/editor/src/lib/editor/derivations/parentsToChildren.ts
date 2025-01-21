@@ -1,13 +1,13 @@
 import { computed, isUninitialized, RESET_VALUE } from '@tldraw/state'
 import { RecordsDiff } from '@tldraw/store'
 import { isShape, TLParentId, TLRecord, TLShape, TLShapeId, TLStore } from '@tldraw/tlschema'
-import { compact } from '@tldraw/utils'
-import { sortByIndex } from '../../utils/reordering/reordering'
+import { compact, sortByIndex } from '@tldraw/utils'
 
 type Parents2Children = Record<TLParentId, TLShapeId[]>
 
 export const parentsToChildren = (store: TLStore) => {
 	const shapeIdsQuery = store.query.ids<'shape'>('shape')
+	const shapeHistory = store.query.filterHistory('shape')
 
 	function fromScratch() {
 		const result: Parents2Children = {}
@@ -36,7 +36,7 @@ export const parentsToChildren = (store: TLStore) => {
 				return fromScratch()
 			}
 
-			const diff = store.history.getDiffSince(lastComputedEpoch)
+			const diff = shapeHistory.getDiffSince(lastComputedEpoch)
 
 			if (diff === RESET_VALUE) {
 				return fromScratch()

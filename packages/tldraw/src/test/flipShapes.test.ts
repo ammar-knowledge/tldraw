@@ -3,10 +3,14 @@ import {
 	PI,
 	TLArrowShape,
 	TLArrowShapeProps,
+	TLBindingCreate,
+	TLImageShape,
 	TLShapeId,
 	TLShapePartial,
+	createBindingId,
 	createShapeId,
 } from '@tldraw/editor'
+import { getArrowBindings } from '../lib/shapes/arrow/shared'
 import { TestEditor } from './TestEditor'
 
 let editor: TestEditor
@@ -61,7 +65,7 @@ beforeEach(() => {
 describe('When flipping horizontally', () => {
 	it('Flips the selected shapes', () => {
 		editor.select(ids.boxA, ids.boxB, ids.boxC)
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
 
 		editor.expectShapeToMatch(
@@ -84,7 +88,7 @@ describe('When flipping horizontally', () => {
 	})
 
 	it('Flips the provided shapes', () => {
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes([ids.boxA, ids.boxB], 'horizontal')
 
 		editor.expectShapeToMatch(
@@ -105,7 +109,7 @@ describe('When flipping horizontally', () => {
 		editor.updateShapes([{ id: ids.boxA, type: 'geo', rotation: PI }])
 		editor.select(ids.boxA, ids.boxB)
 		const a = editor.getSelectionPageBounds()
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
 
 		const b = editor.getSelectionPageBounds()
@@ -130,7 +134,7 @@ describe('When flipping horizontally', () => {
 		editor.updateShapes([{ id: ids.boxA, type: 'geo', rotation: PI }])
 		editor.select(ids.boxB, ids.boxC)
 		const a = editor.getSelectionPageBounds()
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
 
 		const b = editor.getSelectionPageBounds()
@@ -141,7 +145,7 @@ describe('When flipping horizontally', () => {
 describe('When flipping vertically', () => {
 	it('Flips the selected shapes', () => {
 		editor.select(ids.boxA, ids.boxB, ids.boxC)
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
 
 		editor.expectShapeToMatch(
@@ -164,7 +168,7 @@ describe('When flipping vertically', () => {
 	})
 
 	it('Flips the provided shapes', () => {
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes([ids.boxA, ids.boxB], 'vertical')
 
 		editor.expectShapeToMatch(
@@ -185,7 +189,7 @@ describe('When flipping vertically', () => {
 		editor.updateShapes([{ id: ids.boxA, type: 'geo', rotation: PI }])
 		editor.select(ids.boxA, ids.boxB)
 		const a = editor.getSelectionPageBounds()
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
 
 		const b = editor.getSelectionPageBounds()
@@ -209,7 +213,7 @@ describe('When flipping vertically', () => {
 		editor.updateShapes([{ id: ids.boxA, type: 'geo', rotation: PI }])
 		editor.select(ids.boxB, ids.boxC)
 		const a = editor.getSelectionPageBounds()
-		editor.mark('flipped')
+		editor.markHistoryStoppingPoint('flipped')
 		editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
 
 		const b = editor.getSelectionPageBounds()
@@ -220,12 +224,12 @@ describe('When flipping vertically', () => {
 it('Preserves the selection bounds.', () => {
 	editor.selectAll()
 	const a = editor.getSelectionPageBounds()
-	editor.mark('flipped')
+	editor.markHistoryStoppingPoint('flipped')
 	editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
 
 	const b = editor.getSelectionPageBounds()
 	expect(a).toMatchObject(b!)
-	editor.mark('flipped')
+	editor.markHistoryStoppingPoint('flipped')
 	editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
 
 	const c = editor.getSelectionPageBounds()
@@ -233,7 +237,7 @@ it('Preserves the selection bounds.', () => {
 })
 
 it('Does, undoes and redoes', () => {
-	editor.mark('flip vertical')
+	editor.markHistoryStoppingPoint('flip vertical')
 	editor.flipShapes([ids.boxA, ids.boxB], 'vertical')
 
 	editor.expectShapeToMatch(
@@ -355,12 +359,10 @@ describe('flipping rotated shapes', () => {
 		editor.selectAll().deleteShapes(editor.getSelectedShapeIds())
 		const props: Partial<TLArrowShapeProps> = {
 			start: {
-				type: 'point',
 				x: 0,
 				y: 0,
 			},
 			end: {
-				type: 'point',
 				x: 100,
 				y: 0,
 			},
@@ -408,8 +410,8 @@ describe('flipping rotated shapes', () => {
 		const transform = editor.getShapePageTransform(id)
 		if (!transform) throw new Error('no transform')
 		const arrow = editor.getShape<TLArrowShape>(id)!
-		if (arrow.props.start.type !== 'point' || arrow.props.end.type !== 'point')
-			throw new Error('not a point')
+		const bindings = getArrowBindings(editor, arrow)
+		if (bindings.start || bindings.end) throw new Error('not a point')
 		const start = Mat.applyToPoint(transform, arrow.props.start)
 		const end = Mat.applyToPoint(transform, arrow.props.end)
 		return { start, end }
@@ -466,11 +468,15 @@ describe('flipping rotated shapes', () => {
 
 describe('When flipping shapes that include arrows', () => {
 	let shapes: TLShapePartial[]
+	let bindings: TLBindingCreate[]
 
 	beforeEach(() => {
 		const box1 = createShapeId()
 		const box2 = createShapeId()
 		const box3 = createShapeId()
+		const arrow1 = createShapeId()
+		const arrow2 = createShapeId()
+		const arrow3 = createShapeId()
 
 		shapes = [
 			{
@@ -492,79 +498,115 @@ describe('When flipping shapes that include arrows', () => {
 				y: 0,
 			},
 			{
-				id: createShapeId(),
+				id: arrow1,
 				type: 'arrow',
 				x: 50,
 				y: 50,
 				props: {
 					bend: 200,
-					start: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.75, y: 0.75 },
-						boundShapeId: box1,
-						isExact: false,
-						isPrecise: true,
-					},
-					end: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.25, y: 0.25 },
-						boundShapeId: box1,
-						isExact: false,
-						isPrecise: true,
-					},
 				},
 			},
 			{
-				id: createShapeId(),
+				id: arrow2,
 				type: 'arrow',
 				x: 50,
 				y: 50,
 				props: {
 					bend: -200,
-					start: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.75, y: 0.75 },
-						boundShapeId: box1,
-						isExact: false,
-						isPrecise: true,
-					},
-					end: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.25, y: 0.25 },
-						boundShapeId: box1,
-						isExact: false,
-						isPrecise: true,
-					},
 				},
 			},
 			{
-				id: createShapeId(),
+				id: arrow3,
 				type: 'arrow',
 				x: 50,
 				y: 50,
 				props: {
 					bend: -200,
-					start: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.75, y: 0.75 },
-						boundShapeId: box1,
-						isExact: false,
-						isPrecise: true,
-					},
-					end: {
-						type: 'binding',
-						normalizedAnchor: { x: 0.25, y: 0.25 },
-						boundShapeId: box3,
-						isExact: false,
-						isPrecise: true,
-					},
+				},
+			},
+		]
+		bindings = [
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow1,
+				toId: box1,
+				props: {
+					terminal: 'start',
+					normalizedAnchor: { x: 0.75, y: 0.75 },
+					isExact: false,
+					isPrecise: true,
+				},
+			},
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow1,
+				toId: box1,
+				props: {
+					terminal: 'end',
+					normalizedAnchor: { x: 0.25, y: 0.25 },
+					isExact: false,
+					isPrecise: true,
+				},
+			},
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow2,
+				toId: box1,
+				props: {
+					terminal: 'start',
+					normalizedAnchor: { x: 0.75, y: 0.75 },
+					isExact: false,
+					isPrecise: true,
+				},
+			},
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow2,
+				toId: box1,
+				props: {
+					terminal: 'end',
+					normalizedAnchor: { x: 0.25, y: 0.25 },
+					isExact: false,
+					isPrecise: true,
+				},
+			},
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow3,
+				toId: box1,
+				props: {
+					terminal: 'start',
+					normalizedAnchor: { x: 0.75, y: 0.75 },
+					isExact: false,
+					isPrecise: true,
+				},
+			},
+			{
+				id: createBindingId(),
+				type: 'arrow',
+				fromId: arrow3,
+				toId: box3,
+				props: {
+					terminal: 'end',
+					normalizedAnchor: { x: 0.25, y: 0.25 },
+					isExact: false,
+					isPrecise: true,
 				},
 			},
 		]
 	})
 
 	it('Flips horizontally', () => {
-		editor.selectAll().deleteShapes(editor.getSelectedShapeIds()).createShapes(shapes)
+		editor
+			.selectAll()
+			.deleteShapes(editor.getSelectedShapeIds())
+			.createShapes(shapes)
+			.createBindings(bindings)
 
 		const boundsBefore = editor.getSelectionRotatedPageBounds()!
 		editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
@@ -572,10 +614,25 @@ describe('When flipping shapes that include arrows', () => {
 	})
 
 	it('Flips vertically', () => {
-		editor.selectAll().deleteShapes(editor.getSelectedShapeIds()).createShapes(shapes)
+		editor
+			.selectAll()
+			.deleteShapes(editor.getSelectedShapeIds())
+			.createShapes(shapes)
+			.createBindings(bindings)
 
 		const boundsBefore = editor.getSelectionRotatedPageBounds()!
 		editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
 		expect(editor.getSelectionRotatedPageBounds()).toCloselyMatchObject(boundsBefore)
 	})
+})
+
+it('Updates the image shape flip properties when flipped', () => {
+	editor.createShape({
+		type: 'image',
+	})
+	editor.select(editor.getLastCreatedShape())
+	editor.flipShapes(editor.getSelectedShapeIds(), 'horizontal')
+	expect(editor.getLastCreatedShape<TLImageShape>().props.flipX).toBe(true)
+	editor.flipShapes(editor.getSelectedShapeIds(), 'vertical')
+	expect(editor.getLastCreatedShape<TLImageShape>().props.flipY).toBe(true)
 })

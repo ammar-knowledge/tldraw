@@ -1,30 +1,31 @@
 import { VecModel } from '@tldraw/tlschema'
 import classNames from 'classnames'
-import { ComponentType, useRef } from 'react'
+import { useRef } from 'react'
+import { useSharedSafeId } from '../../hooks/useSafeId'
 import { useTransform } from '../../hooks/useTransform'
 import { Box } from '../../primitives/Box'
 import { Vec } from '../../primitives/Vec'
 import { clamp } from '../../primitives/utils'
 
 /** @public */
-export type TLCollaboratorHintComponent = ComponentType<{
+export interface TLCollaboratorHintProps {
 	className?: string
 	point: VecModel
 	viewport: Box
 	zoom: number
 	opacity?: number
 	color: string
-}>
+}
 
-/** @public */
-export const DefaultCollaboratorHint: TLCollaboratorHintComponent = ({
+/** @public @react */
+export function DefaultCollaboratorHint({
 	className,
 	zoom,
 	point,
 	color,
 	viewport,
 	opacity = 1,
-}) => {
+}: TLCollaboratorHintProps) {
 	const rSvg = useRef<SVGSVGElement>(null)
 
 	useTransform(
@@ -34,11 +35,17 @@ export const DefaultCollaboratorHint: TLCollaboratorHintComponent = ({
 		1 / zoom,
 		Vec.Angle(viewport.center, point)
 	)
+	const cursorHintId = useSharedSafeId('cursor_hint')
 
 	return (
 		<svg ref={rSvg} className={classNames('tl-overlays__item', className)}>
-			<use href="#cursor_hint" color={color} strokeWidth={3} stroke="var(--color-background)" />
-			<use href="#cursor_hint" color={color} opacity={opacity} />
+			<use
+				href={`#${cursorHintId}`}
+				color={color}
+				strokeWidth={3}
+				stroke="var(--color-background)"
+			/>
+			<use href={`#${cursorHintId}`} color={color} opacity={opacity} />
 		</svg>
 	)
 }

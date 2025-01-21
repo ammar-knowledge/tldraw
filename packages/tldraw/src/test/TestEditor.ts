@@ -1,13 +1,17 @@
 import {
+	Box,
 	BoxModel,
 	Editor,
 	HALF_PI,
+	IdOf,
 	Mat,
 	PageRecordType,
 	ROTATE_CORNER_TO_SELECTION_CORNER,
 	RequiredKeys,
 	RotateCorner,
 	SelectionHandle,
+	TLArrowBinding,
+	TLArrowShape,
 	TLContent,
 	TLEditorOptions,
 	TLEventInfo,
@@ -17,15 +21,22 @@ import {
 	TLShape,
 	TLShapeId,
 	TLShapePartial,
+	TLStoreOptions,
 	TLWheelEventInfo,
 	Vec,
 	VecLike,
+	compact,
+	computed,
 	createShapeId,
 	createTLStore,
+	isAccelKey,
 	rotateSelectionHandle,
+	tlenv,
 } from '@tldraw/editor'
+import { defaultBindingUtils } from '../lib/defaultBindingUtils'
 import { defaultShapeTools } from '../lib/defaultShapeTools'
 import { defaultShapeUtils } from '../lib/defaultShapeUtils'
+import { registerDefaultSideEffects } from '../lib/defaultSideEffects'
 import { defaultTools } from '../lib/defaultTools'
 import { shapesFromJsx } from './test-jsx'
 
@@ -53,24 +64,48 @@ declare global {
 }
 
 export class TestEditor extends Editor {
-	constructor(options: Partial<Omit<TLEditorOptions, 'store'>> = {}) {
+	constructor(
+		options: Partial<Omit<TLEditorOptions, 'store'>> = {},
+		storeOptions: Partial<TLStoreOptions> = {}
+	) {
 		const elm = document.createElement('div')
+		const bounds = {
+			x: 0,
+			y: 0,
+			top: 0,
+			left: 0,
+			width: 1080,
+			height: 720,
+			bottom: 720,
+			right: 1080,
+		}
+		// make the app full screen for the sake of the insets property
+		jest.spyOn(document.body, 'scrollWidth', 'get').mockImplementation(() => bounds.width)
+		jest.spyOn(document.body, 'scrollHeight', 'get').mockImplementation(() => bounds.height)
+
 		elm.tabIndex = 0
+		elm.getBoundingClientRect = () => bounds as DOMRect
 
 		const shapeUtilsWithDefaults = [...defaultShapeUtils, ...(options.shapeUtils ?? [])]
+		const bindingUtilsWithDefaults = [...defaultBindingUtils, ...(options.bindingUtils ?? [])]
 
 		super({
 			...options,
-			shapeUtils: [...shapeUtilsWithDefaults],
+			shapeUtils: shapeUtilsWithDefaults,
+			bindingUtils: bindingUtilsWithDefaults,
 			tools: [...defaultTools, ...defaultShapeTools, ...(options.tools ?? [])],
-			store: createTLStore({ shapeUtils: [...shapeUtilsWithDefaults] }),
+			store: createTLStore({
+				shapeUtils: shapeUtilsWithDefaults,
+				bindingUtils: bindingUtilsWithDefaults,
+				...storeOptions,
+			}),
 			getContainer: () => elm,
 			initialState: 'select',
 		})
+		this.elm = elm
+		this.bounds = bounds
 
 		// Pretty hacky way to mock the screen bounds
-		this.elm = elm
-		this.elm.getBoundingClientRect = () => this.bounds as DOMRect
 		document.body.appendChild(this.elm)
 
 		this.textMeasure.measureText = (
@@ -83,7 +118,7 @@ export class TestEditor extends Editor {
 				lineHeight: number
 				maxWidth: null | number
 			}
-		): BoxModel => {
+		): BoxModel & { scrollWidth: number } => {
 			const breaks = textToMeasure.split('\n')
 			const longest = breaks.reduce((acc, curr) => {
 				return curr.length > acc.length ? curr : acc
@@ -98,6 +133,7 @@ export class TestEditor extends Editor {
 				h:
 					(opts.maxWidth === null ? breaks.length : Math.ceil(w % opts.maxWidth) + breaks.length) *
 					opts.fontSize,
+				scrollWidth: opts.maxWidth === null ? w : Math.max(w, opts.maxWidth),
 			}
 		}
 
@@ -112,10 +148,58 @@ export class TestEditor extends Editor {
 
 		// Turn off edge scrolling for tests. Tests that require this can turn it back on.
 		this.user.updateUserPreferences({ edgeScrollSpeed: 0 })
+
+		this.sideEffects.registerAfterCreateHandler('shape', (record) => {
+			this._lastCreatedShapes.push(record)
+		})
+
+		// Wow! we'd forgotten these for a long time
+		registerDefaultSideEffects(this)
 	}
 
-	elm: HTMLDivElement
-	bounds = { x: 0, y: 0, top: 0, left: 0, width: 1080, height: 720, bottom: 720, right: 1080 }
+	getHistory() {
+		return this.history
+	}
+
+	private _lastCreatedShapes: TLShape[] = []
+
+	/**
+	 * Get the last created shapes.
+	 *
+	 * @param count - The number of shapes to get.
+	 */
+	getLastCreatedShapes(count = 1) {
+		return this._lastCreatedShapes.slice(-count).map((s) => this.getShape(s)!)
+	}
+
+	/**
+	 * Get the last created shape.
+	 */
+	getLastCreatedShape<T extends TLShape>() {
+		const lastShape = this._lastCreatedShapes[this._lastCreatedShapes.length - 1] as T
+		return this.getShape<T>(lastShape)!
+	}
+
+	elm: HTMLElement
+	readonly bounds: {
+		x: number
+		y: number
+		top: number
+		left: number
+		width: number
+		height: number
+		bottom: number
+		right: number
+	}
+
+	/**
+	 * The center of the viewport in the current page space.
+	 *
+	 * @public
+	 */
+	@computed getViewportPageCenter() {
+		return this.getViewportPageBounds().center
+	}
 
 	setScreenBounds(bounds: BoxModel, center = false) {
 		this.bounds.x = bounds.x
@@ -127,14 +211,13 @@ export class TestEditor extends Editor {
 		this.bounds.right = bounds.x + bounds.w
 		this.bounds.bottom = bounds.y + bounds.h
 
-		this.updateViewportScreenBounds(center)
-		this.updateRenderingBounds()
+		this.updateViewportScreenBounds(Box.From(bounds), center)
 		return this
 	}
 
 	clipboard = null as TLContent | null
 
-	copy = (ids = this.getSelectedShapeIds()) => {
+	copy(ids = this.getSelectedShapeIds()) {
 		if (ids.length > 0) {
 			const content = this.getContentFromCurrentPage(ids)
 			if (content) {
@@ -144,7 +227,7 @@ export class TestEditor extends Editor {
 		return this
 	}
 
-	cut = (ids = this.getSelectedShapeIds()) => {
+	cut(ids = this.getSelectedShapeIds()) {
 		if (ids.length > 0) {
 			const content = this.getContentFromCurrentPage(ids)
 			if (content) {
@@ -155,11 +238,11 @@ export class TestEditor extends Editor {
 		return this
 	}
 
-	paste = (point?: VecLike) => {
+	paste(point?: VecLike) {
 		if (this.clipboard !== null) {
 			const p = this.inputs.shiftKey ? this.inputs.currentPagePoint : point
 
-			this.mark('pasting')
+			this.markHistoryStoppingPoint('pasting')
 			this.putContentOntoCurrentPage(this.clipboard, {
 				point: p,
 				select: true,
@@ -174,12 +257,12 @@ export class TestEditor extends Editor {
 	 * _transformPointerDownSpy.mockRestore())
 	 */
 	_transformPointerDownSpy = jest
-		.spyOn(this._clickManager, 'transformPointerDownEvent')
+		.spyOn(this._clickManager, 'handlePointerEvent')
 		.mockImplementation((info) => {
 			return info
 		})
 	_transformPointerUpSpy = jest
-		.spyOn(this._clickManager, 'transformPointerDownEvent')
+		.spyOn(this._clickManager, 'handlePointerEvent')
 		.mockImplementation((info) => {
 			return info
 		})
@@ -191,7 +274,7 @@ export class TestEditor extends Editor {
 		return PageRecordType.createId(id)
 	}
 
-	expectToBeIn = (path: string) => {
+	expectToBeIn(path: string) {
 		expect(this.getPath()).toBe(path)
 		return this
 	}
@@ -204,20 +287,40 @@ export class TestEditor extends Editor {
 			y: +camera.y.toFixed(2),
 			z: +camera.z.toFixed(2),
 		}).toCloselyMatchObject({ x, y, z })
+
+		return this
 	}
 
-	expectShapeToMatch = (...model: RequiredKeys<TLShapePartial, 'id'>[]) => {
+	expectShapeToMatch<T extends TLShape = TLShape>(
+		...model: RequiredKeys<Partial<TLShapePartial<T>>, 'id'>[]
+	) {
 		model.forEach((model) => {
-			const shape = this.getShape(model.id)!
+			const shape = this.getShape(model.id!)!
 			const next = { ...shape, ...model }
 			expect(shape).toCloselyMatchObject(next)
 		})
 		return this
 	}
 
+	expectPageBoundsToBe<T extends TLShape = TLShape>(id: IdOf<T>, bounds: Partial<BoxModel>) {
+		const observedBounds = this.getShapePageBounds(id)!
+		expect(observedBounds).toCloselyMatchObject(bounds)
+		return this
+	}
+
+	expectScreenBoundsToBe<T extends TLShape = TLShape>(id: IdOf<T>, bounds: Partial<BoxModel>) {
+		const pageBounds = this.getShapePageBounds(id)!
+		const screenPoint = this.pageToScreen(pageBounds.point)
+		const observedBounds = pageBounds.clone()
+		observedBounds.x = screenPoint.x
+		observedBounds.y = screenPoint.y
+		expect(observedBounds).toCloselyMatchObject(bounds)
+		return this
+	}
+
 	/* --------------------- Inputs --------------------- */
 
-	protected getInfo = <T extends TLEventInfo>(info: string | T): T => {
+	protected getInfo<T extends TLEventInfo>(info: string | T): T {
 		return typeof info === 'string'
 			? ({
 					target: 'shape',
@@ -226,12 +329,12 @@ export class TestEditor extends Editor {
 			: info
 	}
 
-	protected getPointerEventInfo = (
+	protected getPointerEventInfo(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: Partial<TLPointerEventInfo> | TLShapeId,
 		modifiers?: EventModifiers
-	): TLPointerEventInfo => {
+	) {
 		if (typeof options === 'string') {
 			options = { target: 'shape', shape: this.getShape(options) }
 		} else if (options === undefined) {
@@ -244,6 +347,8 @@ export class TestEditor extends Editor {
 			shiftKey: this.inputs.shiftKey,
 			ctrlKey: this.inputs.ctrlKey,
 			altKey: this.inputs.altKey,
+			metaKey: this.inputs.metaKey,
+			accelKey: isAccelKey({ ...this.inputs, ...modifiers }),
 			point: { x, y, z: null },
 			button: 0,
 			isPen: false,
@@ -252,15 +357,17 @@ export class TestEditor extends Editor {
 		} as TLPointerEventInfo
 	}
 
-	protected getKeyboardEventInfo = (
+	protected getKeyboardEventInfo(
 		key: string,
 		name: TLKeyboardEventInfo['name'],
 		options = {} as Partial<Exclude<TLKeyboardEventInfo, 'point'>>
-	): TLKeyboardEventInfo => {
+	): TLKeyboardEventInfo {
 		return {
 			shiftKey: key === 'Shift',
 			ctrlKey: key === 'Control' || key === 'Meta',
 			altKey: key === 'Alt',
+			metaKey: key === 'Meta',
+			accelKey: tlenv.isDarwin ? key === 'Meta' : key === 'Control' || key === 'Meta',
 			...options,
 			name,
 			code:
@@ -268,17 +375,19 @@ export class TestEditor extends Editor {
 					? 'ShiftLeft'
 					: key === 'Alt'
 						? 'AltLeft'
-						: key === 'Control' || key === 'Meta'
+						: key === 'Control'
 							? 'CtrlLeft'
-							: key === ' '
-								? 'Space'
-								: key === 'Enter' ||
-									  key === 'ArrowRight' ||
-									  key === 'ArrowLeft' ||
-									  key === 'ArrowUp' ||
-									  key === 'ArrowDown'
-									? key
-									: 'Key' + key[0].toUpperCase() + key.slice(1),
+							: key === 'Meta'
+								? 'MetaLeft'
+								: key === ' '
+									? 'Space'
+									: key === 'Enter' ||
+										  key === 'ArrowRight' ||
+										  key === 'ArrowLeft' ||
+										  key === 'ArrowUp' ||
+										  key === 'ArrowDown'
+										? key
+										: 'Key' + key[0].toUpperCase() + key.slice(1),
 			type: 'keyboard',
 			key,
 		}
@@ -286,62 +395,92 @@ export class TestEditor extends Editor {
 
 	/* ------------------ Input Events ------------------ */
 
-	pointerMove = (
+	/**
+	Some of our updates are not synchronous any longer. For example, drawing happens on tick instead of on pointer move.
+	You can use this helper to force the tick, which will then process all the updates.
+	*/
+	forceTick(count = 1) {
+		for (let i = 0; i < count; i++) {
+			this.emit('tick', 16)
+		}
+		return this
+	}
+
+	pointerMove(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: PointerEventInit,
 		modifiers?: EventModifiers
-	) => {
+	) {
 		this.dispatch({
 			...this.getPointerEventInfo(x, y, options, modifiers),
 			name: 'pointer_move',
-		})
+		}).forceTick()
 		return this
 	}
 
-	pointerDown = (
+	pointerDown(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: PointerEventInit,
 		modifiers?: EventModifiers
-	) => {
+	) {
 		this.dispatch({
 			...this.getPointerEventInfo(x, y, options, modifiers),
 			name: 'pointer_down',
-		})
+		}).forceTick()
 		return this
 	}
 
-	pointerUp = (
+	pointerUp(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: PointerEventInit,
 		modifiers?: EventModifiers
-	) => {
+	) {
 		this.dispatch({
 			...this.getPointerEventInfo(x, y, options, modifiers),
 			name: 'pointer_up',
-		})
+		}).forceTick()
 		return this
 	}
 
-	click = (
+	click(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: PointerEventInit,
 		modifiers?: EventModifiers
-	) => {
+	) {
 		this.pointerDown(x, y, options, modifiers)
 		this.pointerUp(x, y, options, modifiers)
 		return this
 	}
 
-	doubleClick = (
+	rightClick(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		options?: PointerEventInit,
 		modifiers?: EventModifiers
-	) => {
+	) {
+		this.dispatch({
+			...this.getPointerEventInfo(x, y, options, modifiers),
+			name: 'pointer_down',
+			button: 2,
+		}).forceTick()
+		this.dispatch({
+			...this.getPointerEventInfo(x, y, options, modifiers),
+			name: 'pointer_up',
+			button: 2,
+		}).forceTick()
+		return this
+	}
+
+	doubleClick(
+		x = this.inputs.currentScreenPoint.x,
+		y = this.inputs.currentScreenPoint.y,
+		options?: PointerEventInit,
+		modifiers?: EventModifiers
+	) {
 		this.pointerDown(x, y, options, modifiers)
 		this.pointerUp(x, y, options, modifiers)
 		this.dispatch({
@@ -355,33 +494,34 @@ export class TestEditor extends Editor {
 			type: 'click',
 			name: 'double_click',
 			phase: 'up',
-		})
+		}).forceTick()
 		return this
 	}
 
-	keyDown = (key: string, options = {} as Partial<Exclude<TLKeyboardEventInfo, 'key'>>) => {
-		this.dispatch({ ...this.getKeyboardEventInfo(key, 'key_down', options) })
+	keyDown(key: string, options = {} as Partial<Exclude<TLKeyboardEventInfo, 'key'>>) {
+		this.dispatch({ ...this.getKeyboardEventInfo(key, 'key_down', options) }).forceTick()
 		return this
 	}
 
-	keyRepeat = (key: string, options = {} as Partial<Exclude<TLKeyboardEventInfo, 'key'>>) => {
-		this.dispatch({ ...this.getKeyboardEventInfo(key, 'key_repeat', options) })
+	keyRepeat(key: string, options = {} as Partial<Exclude<TLKeyboardEventInfo, 'key'>>) {
+		this.dispatch({ ...this.getKeyboardEventInfo(key, 'key_repeat', options) }).forceTick()
 		return this
 	}
 
-	keyUp = (key: string, options = {} as Partial<Omit<TLKeyboardEventInfo, 'key'>>) => {
+	keyUp(key: string, options = {} as Partial<Omit<TLKeyboardEventInfo, 'key'>>) {
 		this.dispatch({
 			...this.getKeyboardEventInfo(key, 'key_up', {
 				shiftKey: this.inputs.shiftKey && key !== 'Shift',
 				ctrlKey: this.inputs.ctrlKey && !(key === 'Control' || key === 'Meta'),
 				altKey: this.inputs.altKey && key !== 'Alt',
+				metaKey: this.inputs.metaKey && key !== 'Meta',
 				...options,
 			}),
-		})
+		}).forceTick()
 		return this
 	}
 
-	wheel = (dx: number, dy: number, options = {} as Partial<Omit<TLWheelEventInfo, 'delta'>>) => {
+	wheel(dx: number, dy: number, options = {} as Partial<Omit<TLWheelEventInfo, 'delta'>>) {
 		this.dispatch({
 			type: 'wheel',
 			name: 'wheel',
@@ -389,13 +529,25 @@ export class TestEditor extends Editor {
 			shiftKey: this.inputs.shiftKey,
 			ctrlKey: this.inputs.ctrlKey,
 			altKey: this.inputs.altKey,
+			metaKey: this.inputs.metaKey,
+			accelKey: isAccelKey(this.inputs),
 			...options,
 			delta: { x: dx, y: dy },
+		}).forceTick(2)
+		return this
+	}
+
+	pan(offset: VecLike): this {
+		const { isLocked, panSpeed } = this.getCameraOptions()
+		if (isLocked) return this
+		const { x: cx, y: cy, z: cz } = this.getCamera()
+		this.setCamera(new Vec(cx + (offset.x * panSpeed) / cz, cy + (offset.y * panSpeed) / cz, cz), {
+			immediate: true,
 		})
 		return this
 	}
 
-	pinchStart = (
+	pinchStart(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		z: number,
@@ -403,13 +555,39 @@ export class TestEditor extends Editor {
 		dy: number,
 		dz: number,
 		options = {} as Partial<Omit<TLPinchEventInfo, 'point' | 'delta' | 'offset'>>
-	) => {
+	) {
 		this.dispatch({
 			type: 'pinch',
 			name: 'pinch_start',
 			shiftKey: this.inputs.shiftKey,
 			ctrlKey: this.inputs.ctrlKey,
 			altKey: this.inputs.altKey,
+			metaKey: this.inputs.metaKey,
+			accelKey: isAccelKey(this.inputs),
+			...options,
+			point: { x, y, z },
+			delta: { x: dx, y: dy, z: dz },
+		}).forceTick()
+		return this
+	}
+
+	pinchTo(
+		x = this.inputs.currentScreenPoint.x,
+		y = this.inputs.currentScreenPoint.y,
+		z: number,
+		dx: number,
+		dy: number,
+		dz: number,
+		options = {} as Partial<Omit<TLPinchEventInfo, 'point' | 'delta' | 'offset'>>
+	) {
+		this.dispatch({
+			type: 'pinch',
+			name: 'pinch_start',
+			shiftKey: this.inputs.shiftKey,
+			ctrlKey: this.inputs.ctrlKey,
+			altKey: this.inputs.altKey,
+			metaKey: this.inputs.metaKey,
+			accelKey: isAccelKey(this.inputs),
 			...options,
 			point: { x, y, z },
 			delta: { x: dx, y: dy, z: dz },
@@ -417,7 +595,7 @@ export class TestEditor extends Editor {
 		return this
 	}
 
-	pinchTo = (
+	pinchEnd(
 		x = this.inputs.currentScreenPoint.x,
 		y = this.inputs.currentScreenPoint.y,
 		z: number,
@@ -425,39 +603,19 @@ export class TestEditor extends Editor {
 		dy: number,
 		dz: number,
 		options = {} as Partial<Omit<TLPinchEventInfo, 'point' | 'delta' | 'offset'>>
-	) => {
-		this.dispatch({
-			type: 'pinch',
-			name: 'pinch_start',
-			shiftKey: this.inputs.shiftKey,
-			ctrlKey: this.inputs.ctrlKey,
-			altKey: this.inputs.altKey,
-			...options,
-			point: { x, y, z },
-			delta: { x: dx, y: dy, z: dz },
-		})
-		return this
-	}
-
-	pinchEnd = (
-		x = this.inputs.currentScreenPoint.x,
-		y = this.inputs.currentScreenPoint.y,
-		z: number,
-		dx: number,
-		dy: number,
-		dz: number,
-		options = {} as Partial<Omit<TLPinchEventInfo, 'point' | 'delta' | 'offset'>>
-	) => {
+	) {
 		this.dispatch({
 			type: 'pinch',
 			name: 'pinch_end',
 			shiftKey: this.inputs.shiftKey,
 			ctrlKey: this.inputs.ctrlKey,
 			altKey: this.inputs.altKey,
+			metaKey: this.inputs.metaKey,
+			accelKey: isAccelKey(this.inputs),
 			...options,
 			point: { x, y, z },
 			delta: { x: dx, y: dy, z: dz },
-		})
+		}).forceTick()
 		return this
 	}
 	/* ------ Interaction Helpers ------ */
@@ -559,7 +717,8 @@ export class TestEditor extends Editor {
 	createShapesFromJsx(
 		shapesJsx: React.JSX.Element | React.JSX.Element[]
 	): Record<string, TLShapeId> {
-		const { shapes, ids } = shapesFromJsx(shapesJsx)
+		const { shapes, assets, ids } = shapesFromJsx(shapesJsx)
+		this.createAssets(assets)
 		this.createShapes(shapes)
 		return ids
 	}
@@ -603,6 +762,13 @@ export class TestEditor extends Editor {
 
 	getPageRotation(shape: TLShape) {
 		return this.getPageRotationById(shape.id)
+	}
+
+	getArrowsBoundTo(shapeId: TLShapeId) {
+		const ids = new Set(
+			this.getBindingsToShape<TLArrowBinding>(shapeId, 'arrow').map((b) => b.fromId)
+		)
+		return compact(Array.from(ids, (id) => this.getShape<TLArrowShape>(id)))
 	}
 }
 

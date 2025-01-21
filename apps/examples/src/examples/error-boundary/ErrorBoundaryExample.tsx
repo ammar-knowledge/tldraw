@@ -1,5 +1,5 @@
-import { createShapeId, Tldraw, TLShapePartial } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { createShapeId, Tldraw, TLShapePartial } from 'tldraw'
+import 'tldraw/tldraw.css'
 import { ErrorShape, ErrorShapeUtil } from './ErrorShape'
 
 // There's a guide at the bottom of this file!
@@ -45,7 +45,7 @@ that always throws an error when it renders.
 [1] 
 We have a shape util that always throws an error when it renders. Check out ErrorShape.ts
 to see how this works. It's important to define this array of shape utils outside of a
-React compenent so that they are not recreated on every render.
+React competent so that they are not recreated on every render.
 
 [2]
 We pass in our shape util to the tldraw component. We also pass in a custom error fallback

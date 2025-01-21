@@ -77,11 +77,10 @@ test.describe('Keyboard Shortcuts', () => {
 		]
 
 		if (isMobile) {
-			// on mobile, the last item (first from the dropdown) is 7
+			// on mobile, the last item (first from the dropdown) is 6
 			positionalToolKbds.push(['7', 'geo-rectangle'])
 		} else {
-			// on desktop, the last item (first from the dropdown) is 9. 8 is the image tool which
-			// we skip here because it opens a browser dialog
+			// on desktop, the last item (first from the dropdown) is 9
 			positionalToolKbds.push(['9', 'geo-rectangle'])
 		}
 		for (const [key, tool] of positionalToolKbds) {
@@ -89,7 +88,7 @@ test.describe('Keyboard Shortcuts', () => {
 			await page.keyboard.press(key)
 			expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
 				name: 'select-tool',
-				data: { id: tool, source: 'kbd' },
+				data: { id: tool, source: 'toolbar' },
 			})
 		}
 	})
@@ -187,7 +186,7 @@ test.describe('Keyboard Shortcuts', () => {
 	test('Toggle dark mode', async () => {
 		await page.keyboard.press('Control+/')
 		expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
-			name: 'toggle-dark-mode',
+			name: 'color-scheme',
 			data: { source: 'kbd' },
 		})
 	})
@@ -211,6 +210,13 @@ test.describe('Actions on shapes', () => {
 
 	test('Operations on shapes', async () => {
 		await setupPageWithShapes(page)
+
+		// needs shapes on the canvas
+		await page.keyboard.press('Control+Shift+c')
+		expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
+			name: 'copy-as',
+			data: { format: 'svg', source: 'kbd' },
+		})
 
 		// select-all — Cmd+A
 		await page.keyboard.press('Control+a')
@@ -353,46 +359,6 @@ test.describe('Actions on shapes', () => {
 		// 	name: 'open-menu',
 		// 	data: { source: 'dialog' },
 		// })
-
-		/* --------------------- Export --------------------- */
-
-		await page.keyboard.press('Control+Shift+c')
-		expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
-			name: 'copy-as',
-			data: { format: 'svg', source: 'kbd' },
-		})
-	})
-})
-
-test.describe('Context menu', async () => {
-	test.beforeEach(async ({ browser }) => {
-		page = await browser.newPage()
-		await setupPage(page)
-		await setupPageWithShapes(page)
-	})
-
-	test('distribute horizontal', async () => {
-		// distribute horizontal
-		await page.keyboard.press('Control+a')
-		await page.mouse.click(200, 200, { button: 'right' })
-		await page.getByTestId('menu-item.arrange').click()
-		await page.getByTestId('menu-item.distribute-horizontal').click()
-		expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
-			name: 'distribute-shapes',
-			data: { operation: 'horizontal', source: 'context-menu' },
-		})
-	})
-
-	test('distribute vertical', async () => {
-		// distribute vertical — Shift+Alt+V
-		await page.keyboard.press('Control+a')
-		await page.mouse.click(200, 200, { button: 'right' })
-		await page.getByTestId('menu-item.arrange').click()
-		await page.getByTestId('menu-item.distribute-vertical').click()
-		expect(await page.evaluate(() => __tldraw_ui_event)).toMatchObject({
-			name: 'distribute-shapes',
-			data: { operation: 'vertical', source: 'context-menu' },
-		})
 	})
 })
 

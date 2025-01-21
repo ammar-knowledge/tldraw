@@ -1,13 +1,13 @@
-import { track, useEditor } from '@tldraw/editor'
 import * as React from 'react'
-import { useAssetUrls } from '../useAssetUrls'
+import { useAssetUrls } from '../../context/asset-urls'
 import { TLUiTranslationKey } from './TLUiTranslationKey'
 import { DEFAULT_TRANSLATION } from './defaultTranslation'
 import { TLUiTranslation, fetchTranslation } from './translations'
 
 /** @public */
 export interface TLUiTranslationProviderProps {
-	children: any
+	children: React.ReactNode
+	locale: string
 	/**
 	 * A collection of overrides different locales.
 	 *
@@ -23,23 +23,27 @@ export interface TLUiTranslationProviderProps {
 /** @public */
 export type TLUiTranslationContextType = TLUiTranslation
 
-const TranslationsContext = React.createContext<TLUiTranslationContextType>(
-	{} as TLUiTranslationContextType
-)
+const TranslationsContext = React.createContext<TLUiTranslationContextType | null>(null)
 
-const useCurrentTranslation = () => React.useContext(TranslationsContext)
+/** @public */
+export function useCurrentTranslation() {
+	const translations = React.useContext(TranslationsContext)
+	if (!translations) {
+		throw new Error('useCurrentTranslation must be used inside of <TldrawUiContextProvider />')
+	}
+	return translations
+}
 
 /**
  * Provides a translation context to the editor.
  *
  * @internal
  */
-export const TranslationProvider = track(function TranslationProvider({
+export function TldrawUiTranslationProvider({
 	overrides,
+	locale,
 	children,
 }: TLUiTranslationProviderProps) {
-	const editor = useEditor()
-	const locale = editor.user.getLocale()
 	const getAssetUrl = useAssetUrls()
 
 	const [currentTranslation, setCurrentTranslation] = React.useState<TLUiTranslation>(() => {
@@ -47,6 +51,7 @@ export const TranslationProvider = track(function TranslationProvider({
 			return {
 				locale: 'en',
 				label: 'English',
+				dir: 'ltr',
 				messages: { ...DEFAULT_TRANSLATION, ...overrides['en'] },
 			}
 		}
@@ -54,6 +59,7 @@ export const TranslationProvider = track(function TranslationProvider({
 		return {
 			locale: 'en',
 			label: 'English',
+			dir: 'ltr',
 			messages: DEFAULT_TRANSLATION,
 		}
 	})
@@ -88,7 +94,7 @@ export const TranslationProvider = track(function TranslationProvider({
 			{children}
 		</TranslationsContext.Provider>
 	)
-})
+}
 
 /**
  * Returns a function to translate a translation key into a string based on the current translation.
@@ -105,7 +111,7 @@ export const TranslationProvider = track(function TranslationProvider({
 export function useTranslation() {
 	const translation = useCurrentTranslation()
 	return React.useCallback(
-		function msg(id: Exclude<string, TLUiTranslationKey> | string) {
+		function msg(id?: Exclude<string, TLUiTranslationKey> | string) {
 			return translation.messages[id as TLUiTranslationKey] ?? id
 		},
 		[translation]

@@ -1,10 +1,4 @@
-import {
-	StateNode,
-	TLCursorType,
-	TLEventHandlers,
-	TLPointerEventInfo,
-	TLSelectionHandle,
-} from '@tldraw/editor'
+import { StateNode, TLCursorType, TLPointerEventInfo, TLSelectionHandle } from '@tldraw/editor'
 
 export const CursorTypeMap: Record<TLSelectionHandle, TLCursorType> = {
 	bottom: 'ns-resize',
@@ -34,41 +28,45 @@ export class PointingResizeHandle extends StateNode {
 	private updateCursor() {
 		const selected = this.editor.getSelectedShapes()
 		const cursorType = CursorTypeMap[this.info.handle!]
-		this.editor.updateInstanceState({
-			cursor: { type: cursorType, rotation: selected.length === 1 ? selected[0].rotation : 0 },
+		this.editor.setCursor({
+			type: cursorType,
+			rotation: selected.length === 1 ? this.editor.getSelectionRotation() : 0,
 		})
 	}
 
-	override onEnter = (info: PointingResizeHandleInfo) => {
+	override onEnter(info: PointingResizeHandleInfo) {
 		this.info = info
 		this.updateCursor()
 	}
 
-	override onPointerMove: TLEventHandlers['onPointerMove'] = () => {
-		const isDragging = this.editor.inputs.isDragging
-
-		if (isDragging) {
-			this.parent.transition('resizing', this.info)
+	override onPointerMove() {
+		if (this.editor.inputs.isDragging) {
+			this.startResizing()
 		}
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onLongPress() {
+		this.startResizing()
+	}
+
+	private startResizing() {
+		if (this.editor.getIsReadonly()) return
+		this.parent.transition('resizing', this.info)
+	}
+
+	override onPointerUp() {
 		this.complete()
 	}
 
-	// override onPinchStart: TLEventHandlers['onPinchStart'] = (info) => {
-	// 	this.parent.transition('pinching', info)
-	// }
-
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.cancel()
 	}
 
-	override onInterrupt = () => {
+	override onInterrupt() {
 		this.cancel()
 	}
 

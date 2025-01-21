@@ -77,11 +77,11 @@ it('Uses typescript generics', () => {
 				type: 'arrow',
 			},
 		])
-	}).toThrowError()
+	}).toThrow()
 })
 
 it('updates shapes', () => {
-	editor.mark('update shapes')
+	editor.markHistoryStoppingPoint('update shapes')
 	editor.updateShapes([
 		{
 			id: ids.box1,

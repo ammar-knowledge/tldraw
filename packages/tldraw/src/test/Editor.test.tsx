@@ -2,9 +2,14 @@ import {
 	AssetRecordType,
 	BaseBoxShapeUtil,
 	PageRecordType,
+	TLGeoShapeProps,
 	TLShape,
+	atom,
 	createShapeId,
 	debounce,
+	getSnapshot,
+	loadSnapshot,
+	react,
 } from '@tldraw/editor'
 import { TestEditor } from './TestEditor'
 import { TL } from './test-jsx'
@@ -22,7 +27,7 @@ const ids = {
 }
 
 beforeEach(() => {
-	editor = new TestEditor()
+	editor = new TestEditor({})
 
 	editor.createShapes([
 		// on it's own
@@ -369,7 +374,6 @@ describe('isFocused', () => {
 
 			if (wasFocused !== isFocused) {
 				editor.updateInstanceState({ isFocused })
-				editor.updateViewportScreenBounds()
 
 				if (!isFocused) {
 					// When losing focus, run complete() to ensure that any interacts end
@@ -447,7 +451,9 @@ describe('isFocused', () => {
 		expect(editor.getInstanceState().isFocused).toBe(false)
 	})
 
-	it('becomes false when a child of the app container div receives a focusout event', () => {
+	it.skip('becomes false when a child of the app container div receives a focusout event', () => {
+		// This used to be true, but the focusout event doesn't actually bubble up anymore
+		// after we reworked to have the focus manager handle things.
 		const child = document.createElement('div')
 		editor.elm.appendChild(child)
 
@@ -582,11 +588,11 @@ describe('snapshots', () => {
 
 		// now serialize
 
-		const snapshot = editor.store.getSnapshot()
+		const snapshot = getSnapshot(editor.store)
 
 		const newEditor = new TestEditor()
 
-		newEditor.store.loadSnapshot(snapshot)
+		loadSnapshot(newEditor.store, snapshot)
 
 		expect(editor.store.serialize()).toEqual(newEditor.store.serialize())
 	})
@@ -643,5 +649,200 @@ describe('when the user prefers light UI', () => {
 	it('should be false if the editor was instantiated with inferDarkMode', () => {
 		editor = new TestEditor({ inferDarkMode: true })
 		expect(editor.user.getIsDarkMode()).toBe(false)
+	})
+})
+
+describe('middle-click panning', () => {
+	it('clears the isPanning state on mouse up', () => {
+		editor.pointerDown(0, 0, {
+			// middle mouse button
+			button: 1,
+		})
+		editor.pointerMove(100, 100)
+		expect(editor.inputs.isPanning).toBe(true)
+		editor.pointerUp(100, 100)
+		expect(editor.inputs.isPanning).toBe(false)
+	})
+
+	it('does not clear thee isPanning state if the space bar is down', () => {
+		editor.pointerDown(0, 0, {
+			// middle mouse button
+			button: 1,
+		})
+		editor.pointerMove(100, 100)
+		expect(editor.inputs.isPanning).toBe(true)
+		editor.keyDown(' ')
+		editor.pointerUp(100, 100, {
+			button: 1,
+		})
+		expect(editor.inputs.isPanning).toBe(true)
+
+		editor.keyUp(' ')
+		expect(editor.inputs.isPanning).toBe(false)
+	})
+})
+
+describe('dragging', () => {
+	it('drags correctly at 100% zoom', () => {
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 0).pointerDown()
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 1)
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 5)
+		expect(editor.inputs.isDragging).toBe(true)
+	})
+
+	it('drags correctly at 150% zoom', () => {
+		editor.setCamera({ x: 0, y: 0, z: 8 }).forceTick()
+
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 0).pointerDown()
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 2)
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 5)
+		expect(editor.inputs.isDragging).toBe(true)
+	})
+
+	it('drags correctly at 50% zoom', () => {
+		editor.setCamera({ x: 0, y: 0, z: 0.1 }).forceTick()
+
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 0).pointerDown()
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 2)
+		expect(editor.inputs.isDragging).toBe(false)
+		editor.pointerMove(0, 5)
+		expect(editor.inputs.isDragging).toBe(true)
+	})
+})
+
+describe('isShapeHidden', () => {
+	const isShapeHidden = jest.fn((shape: TLShape) => {
+		return !!shape.meta.hidden
+	})
+
+	beforeEach(() => {
+		editor = new TestEditor({ isShapeHidden })
+
+		editor.createShapes([
+			{
+				id: ids.box1,
+				type: 'geo',
+				x: 100,
+				y: 100,
+				props: { w: 100, h: 100, fill: 'solid' } satisfies Partial<TLGeoShapeProps>,
+			},
+			{
+				id: ids.box2,
+				type: 'geo',
+				x: 200,
+				y: 200,
+				props: { w: 100, h: 100, fill: 'solid' } satisfies Partial<TLGeoShapeProps>,
+			},
+			{
+				id: ids.box3,
+				type: 'geo',
+				x: 300,
+				y: 300,
+				props: { w: 100, h: 100, fill: 'solid' } satisfies Partial<TLGeoShapeProps>,
+			},
+		])
+	})
+
+	it('can be directly used via editor.isShapeHidden', () => {
+		expect(editor.isShapeHidden(editor.getShape(ids.box1)!)).toBe(false)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(editor.isShapeHidden(editor.getShape(ids.box1)!)).toBe(true)
+	})
+
+	it('excludes hidden shapes from the rendering shapes array', () => {
+		expect(editor.getRenderingShapes().length).toBe(3)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(editor.getRenderingShapes().length).toBe(2)
+		editor.updateShape({ id: ids.box2, type: 'geo', meta: { hidden: true } })
+		expect(editor.getRenderingShapes().length).toBe(1)
+	})
+
+	it('excludes hidden shapes from hit testing', () => {
+		expect(editor.getShapeAtPoint({ x: 150, y: 150 })).toBeDefined()
+		expect(editor.getShapesAtPoint({ x: 150, y: 150 }).length).toBe(1)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(editor.getShapeAtPoint({ x: 150, y: 150 })).not.toBeDefined()
+		expect(editor.getShapesAtPoint({ x: 150, y: 150 }).length).toBe(0)
+	})
+
+	it('uses the callback reactively', () => {
+		const isFilteringEnabled = atom('', true)
+		isShapeHidden.mockImplementation((shape: TLShape) => {
+			if (!isFilteringEnabled.get()) return false
+			return !!shape.meta.hidden
+		})
+		let renderingShapes = editor.getRenderingShapes()
+		react('setRenderingShapes', () => {
+			renderingShapes = editor.getRenderingShapes()
+		})
+		expect(renderingShapes.length).toBe(3)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(renderingShapes.length).toBe(2)
+		isFilteringEnabled.set(false)
+		expect(renderingShapes.length).toBe(3)
+		isFilteringEnabled.set(true)
+		expect(renderingShapes.length).toBe(2)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: false } })
+		expect(renderingShapes.length).toBe(3)
+	})
+
+	it('applies recursively to children', () => {
+		const groupId = createShapeId('group')
+		editor.groupShapes([ids.box1, ids.box2], { groupId })
+
+		expect(editor.isShapeHidden(editor.getShape(groupId)!)).toBe(false)
+		expect(editor.isShapeHidden(editor.getShape(ids.box1)!)).toBe(false)
+		editor.updateShape({ id: groupId, type: 'group', meta: { hidden: true } })
+		expect(editor.isShapeHidden(editor.getShape(groupId)!)).toBe(true)
+		expect(editor.isShapeHidden(editor.getShape(ids.box1)!)).toBe(true)
+	})
+
+	it('still allows hidden shapes to be selected', () => {
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		editor.select(ids.box1)
+		expect(editor.getSelectedShapeIds()).toEqual([ids.box1])
+		expect(editor.isShapeHidden(editor.getShape(ids.box1)!)).toBe(true)
+	})
+
+	it('applies to getCurrentPageRenderingShapesSorted', () => {
+		expect(editor.getCurrentPageRenderingShapesSorted().length).toBe(3)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(editor.getCurrentPageRenderingShapesSorted().length).toBe(2)
+	})
+
+	it('does not apply to getCurrentPageShapesSorted', () => {
+		expect(editor.getCurrentPageShapesSorted().length).toBe(3)
+		editor.updateShape({ id: ids.box1, type: 'geo', meta: { hidden: true } })
+		expect(editor.getCurrentPageShapesSorted().length).toBe(3)
+	})
+})
+
+describe('instance.isReadonly', () => {
+	it('updates in accordance with collaboration.mode', () => {
+		const mode = atom<'readonly' | 'readwrite'>('', 'readonly')
+		const editor = new TestEditor(
+			{},
+			{
+				collaboration: {
+					mode,
+					status: atom('', 'online'),
+				},
+			}
+		)
+
+		expect(editor.getIsReadonly()).toBe(true)
+
+		mode.set('readwrite')
+		expect(editor.getIsReadonly()).toBe(false)
+		mode.set('readonly')
+		expect(editor.getIsReadonly()).toBe(true)
 	})
 })

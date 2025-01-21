@@ -28,8 +28,10 @@ const config: PlaywrightTestConfig = {
 			threshold: 0.01,
 		},
 	},
-	/* Run tests in files in parallel */
-	fullyParallel: true,
+	// Run files in parallel, but tests within a file in sequence. This is important for certain
+	// tests that use shared system resources like the clipboard, which should all be kept in the
+	// same file.
+	fullyParallel: false,
 	/* Fail the build on CI if you accidentally left test.only in the source code. */
 	forbidOnly: false, // !!process.env.CI,
 	/* Retry on CI only */
@@ -46,6 +48,8 @@ const config: PlaywrightTestConfig = {
 		/* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
 		trace: 'on-first-retry',
 		headless: true, // !process.env.CI,
+		video: 'retain-on-failure',
+		screenshot: 'only-on-failure',
 	},
 
 	/* Configure projects for major browsers */

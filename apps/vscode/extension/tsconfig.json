@@ -19,9 +19,15 @@
 		"baseUrl": ".",
 		"composite": true,
 		"importHelpers": false,
-		"skipDefaultLibCheck": true,
-		"experimentalDecorators": true
+		"skipDefaultLibCheck": true
 	},
 	"include": ["src", "../messages", "scripts"],
-	"references": [{ "path": "../../../packages/tldraw" }]
+	"references": [
+		{
+			"path": "../../../packages/editor"
+		},
+		{
+			"path": "../../../packages/tldraw"
+		}
+	]
 }

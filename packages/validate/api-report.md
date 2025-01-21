@@ -4,7 +4,9 @@
 
 ```ts
 
+import { IndexKey } from '@tldraw/utils';
 import { JsonValue } from '@tldraw/utils';
+import { MakeUndefinedOptional } from '@tldraw/utils';
 
 // @public
 const any: Validator<any>;
@@ -45,6 +47,12 @@ export class DictValidator<Key extends string, Value> extends Validator<Record<K
 }
 
 // @public
+const httpUrl: Validator<string>;
+
+// @public
+const indexKey: Validator<IndexKey>;
+
+// @public
 const integer: Validator<number>;
 
 // @public
@@ -79,10 +87,13 @@ function nullable<T>(validator: Validatable<T>): Validator<null | T>;
 // @public
 const number: Validator<number>;
 
+// @internal (undocumented)
+function numberUnion<Key extends string, Config extends UnionValidatorConfig<Key, Config>>(key: Key, config: Config): UnionValidator<Key, Config>;
+
 // @public
 function object<Shape extends object>(config: {
     readonly [K in keyof Shape]: Validatable<Shape[K]>;
-}): ObjectValidator<Shape>;
+}): ObjectValidator<MakeUndefinedOptional<Shape>>;
 
 // @public (undocumented)
 export class ObjectValidator<Shape extends object> extends Validator<Shape> {
@@ -102,6 +113,9 @@ export class ObjectValidator<Shape extends object> extends Validator<Shape> {
 
 // @public (undocumented)
 function optional<T>(validator: Validatable<T>): Validator<T | undefined>;
+
+// @public
+function or<T1, T2>(v1: Validatable<T1>, v2: Validatable<T2>): Validator<T1 | T2>;
 
 // @public
 const positiveInteger: Validator<number>;
@@ -126,18 +140,22 @@ declare namespace T {
         jsonDict,
         dict,
         union,
+        numberUnion,
         model,
         setEnum,
         optional,
         nullable,
         literalEnum,
+        or,
         ValidatorFn,
+        ValidatorUsingKnownGoodVersionFn,
         Validatable,
         ValidationError,
         TypeOf,
         Validator,
         ArrayOfValidator,
         ObjectValidator,
+        UnionValidatorConfig,
         UnionValidator,
         DictValidator,
         unknown,
@@ -155,23 +173,34 @@ declare namespace T {
         unknownObject,
         jsonValue,
         linkUrl,
-        srcUrl
+        srcUrl,
+        httpUrl,
+        indexKey
     }
 }
 export { T }
 
 // @public (undocumented)
-type TypeOf<V extends Validatable<unknown>> = V extends Validatable<infer T> ? T : never;
+type TypeOf<V extends Validatable<any>> = V extends Validatable<infer T> ? T : never;
 
 // @public
 function union<Key extends string, Config extends UnionValidatorConfig<Key, Config>>(key: Key, config: Config): UnionValidator<Key, Config>;
 
 // @public (undocumented)
 export class UnionValidator<Key extends string, Config extends UnionValidatorConfig<Key, Config>, UnknownValue = never> extends Validator<TypeOf<Config[keyof Config]> | UnknownValue> {
-    constructor(key: Key, config: Config, unknownValueValidation: (value: object, variant: string) => UnknownValue);
+    constructor(key: Key, config: Config, unknownValueValidation: (value: object, variant: string) => UnknownValue, useNumberKeys: boolean);
     // (undocumented)
     validateUnknownVariants<Unknown>(unknownValueValidation: (value: object, variant: string) => Unknown): UnionValidator<Key, Config, Unknown>;
 }
+
+// @public (undocumented)
+export type UnionValidatorConfig<Key extends string, Config> = {
+    readonly [Variant in keyof Config]: Validatable<any> & {
+        validate(input: any): {
+            readonly [K in Key]: Variant;
+        };
+    };
+};
 
 // @public
 const unknown: Validator<unknown>;
@@ -180,9 +209,11 @@ const unknown: Validator<unknown>;
 const unknownObject: Validator<Record<string, unknown>>;
 
 // @public (undocumented)
-type Validatable<T> = {
-    validate: (value: unknown) => T;
-};
+interface Validatable<T> {
+    // (undocumented)
+    validate(value: unknown): T;
+    validateUsingKnownGoodVersion?(knownGoodValue: T, newValue: unknown): T;
+}
 
 // @public (undocumented)
 class ValidationError extends Error {
@@ -197,7 +228,7 @@ class ValidationError extends Error {
 
 // @public (undocumented)
 export class Validator<T> implements Validatable<T> {
-    constructor(validationFn: ValidatorFn<T>);
+    constructor(validationFn: ValidatorFn<T>, validateUsingKnownGoodVersionFn?: undefined | ValidatorUsingKnownGoodVersionFn<T, T>);
     check(name: string, checkFn: (value: T) => void): Validator<T>;
     // (undocumented)
     check(checkFn: (value: T) => void): Validator<T>;
@@ -207,11 +238,18 @@ export class Validator<T> implements Validatable<T> {
     refine<U>(otherValidationFn: (value: T) => U): Validator<U>;
     validate(value: unknown): T;
     // (undocumented)
+    validateUsingKnownGoodVersion(knownGoodValue: T, newValue: unknown): T;
+    // (undocumented)
+    readonly validateUsingKnownGoodVersionFn?: undefined | ValidatorUsingKnownGoodVersionFn<T, T>;
+    // (undocumented)
     readonly validationFn: ValidatorFn<T>;
 }
 
 // @public (undocumented)
 type ValidatorFn<T> = (value: unknown) => T;
+
+// @public (undocumented)
+type ValidatorUsingKnownGoodVersionFn<In, Out = In> = (knownGoodValue: In, value: unknown) => Out;
 
 // (No @packageDocumentation comment for this package)
 

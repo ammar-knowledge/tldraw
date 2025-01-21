@@ -12,14 +12,14 @@ import {
 	assert,
 	compact,
 	createShapeId,
+	mockUniqueId,
 	sortByIndex,
 } from '@tldraw/editor'
+import { getArrowBindings } from '../lib/shapes/arrow/shared'
 import { TestEditor } from './TestEditor'
 
-jest.mock('nanoid', () => {
-	let i = 0
-	return { nanoid: () => 'id' + i++ }
-})
+let nextNanoId = 0
+mockUniqueId(() => `${nextNanoId++}`)
 
 const ids = {
 	boxA: createShapeId('boxA'),
@@ -57,16 +57,8 @@ const arrow = (id: TLShapeId, start: VecLike, end: VecLike): TLShapePartial => (
 	id,
 	// index: bumpIndex(),
 	props: {
-		start: {
-			type: 'point',
-			x: start.x,
-			y: start.y,
-		},
-		end: {
-			type: 'point',
-			x: end.x,
-			y: end.y,
-		},
+		start: { x: start.x, y: start.y },
+		end: { x: end.x, y: end.y },
 	},
 })
 const randomRotation = () => Math.random() * Math.PI * 2
@@ -883,7 +875,7 @@ describe('right clicking in detail', () => {
 			box(ids.boxB, 20, 0, 10, 10, 'solid'),
 			box(ids.boxC, 0, 50, 10, 10, 'none'),
 		])
-		editor.groupShapes([ids.boxA, ids.boxB], groupId)
+		editor.groupShapes([ids.boxA, ids.boxB], { groupId: groupId })
 		editor.selectNone()
 	})
 
@@ -915,9 +907,9 @@ describe('the select tool', () => {
 			box(ids.boxC, 60, 0, 10, 10),
 			box(ids.boxD, 90, 0, 10, 10),
 		])
-		editor.groupShapes([ids.boxA, ids.boxB], groupAId)
-		editor.groupShapes([ids.boxC, ids.boxD], groupBId)
-		editor.groupShapes([groupAId, groupBId], groupCId)
+		editor.groupShapes([ids.boxA, ids.boxB], { groupId: groupAId })
+		editor.groupShapes([ids.boxC, ids.boxD], { groupId: groupBId })
+		editor.groupShapes([groupAId, groupBId], { groupId: groupCId })
 		editor.selectNone()
 	})
 
@@ -945,13 +937,15 @@ describe('the select tool', () => {
 		editor
 			.pointerDown(0, 0, { target: 'shape', shape: boxA, button: 2 })
 			.pointerUp(0, 0, { button: 2 })
-		expect(onlySelectedId()).toBe(groupAId)
+		expect(onlySelectedId()).toBe(groupCId)
+		expect(editor.getFocusedGroupId()).toBe(editor.getCurrentPageId())
+		editor.select(groupAId)
 		expect(editor.getFocusedGroupId()).toBe(groupCId)
 		editor
 			.pointerDown(0, 0, { target: 'shape', shape: boxA, button: 2 })
 			.pointerUp(0, 0, { button: 2 })
-		expect(onlySelectedId()).toBe(ids.boxA)
-		expect(editor.getFocusedGroupId()).toBe(groupAId)
+		expect(onlySelectedId()).toBe(groupAId)
+		expect(editor.getFocusedGroupId()).toBe(groupCId)
 	})
 
 	it('should allow to shift-select other shapes outside of the current focus layer', () => {
@@ -1562,8 +1556,9 @@ describe('binding bug', () => {
 		// go from A to group A
 		editor.pointerDown(5, 5).pointerMove(25, 5).pointerUp()
 		const arrow = onlySelectedShape() as TLArrowShape
-		expect(arrow.props.start).toMatchObject({ boundShapeId: ids.boxA })
-		expect(arrow.props.end).toMatchObject({ type: 'point' })
+		const bindings = getArrowBindings(editor, arrow)
+		expect(bindings.start).toMatchObject({ toId: ids.boxA })
+		expect(bindings.end).toBeUndefined()
 	})
 })
 
@@ -1608,9 +1603,10 @@ describe('bindings', () => {
 		// go from E to group C (not hovering over a leaf box)
 		editor.pointerDown(5, 25).pointerMove(35, 5).pointerUp()
 		const arrow = onlySelectedShape() as TLArrowShape
+		const bindings = getArrowBindings(editor, arrow)
 
-		expect(arrow.props.start).toMatchObject({ boundShapeId: ids.boxE })
-		expect(arrow.props.end).toMatchObject({ type: 'point' })
+		expect(bindings.start).toMatchObject({ toId: ids.boxE })
+		expect(bindings.end).toBeUndefined()
 	})
 
 	it('can not be made from a group shape to some sibling shape', () => {
@@ -1619,20 +1615,22 @@ describe('bindings', () => {
 		editor.pointerDown(35, 5).pointerMove(5, 25).pointerUp()
 
 		const arrow = onlySelectedShape() as TLArrowShape
+		const bindings = getArrowBindings(editor, arrow)
 
-		expect(arrow.props.start).toMatchObject({ type: 'point' })
-		expect(arrow.props.end).toMatchObject({ boundShapeId: ids.boxE })
+		expect(bindings.start).toBeUndefined()
+		expect(bindings.end).toMatchObject({ toId: ids.boxE })
 	})
 	it('can be made from a shape within a group to some shape outside of the group', () => {
 		editor.setCurrentTool('arrow')
 		// go from A to E
 		editor.pointerDown(5, 5).pointerMove(5, 25).pointerUp()
 		const arrow = onlySelectedShape() as TLArrowShape
+		const bindings = getArrowBindings(editor, arrow)
 
 		expect(arrow.parentId).toBe(editor.getCurrentPageId())
 
-		expect(arrow.props.start).toMatchObject({ boundShapeId: ids.boxA })
-		expect(arrow.props.end).toMatchObject({ boundShapeId: ids.boxE })
+		expect(bindings.start).toMatchObject({ toId: ids.boxA })
+		expect(bindings.end).toMatchObject({ toId: ids.boxE })
 	})
 
 	it('can be made from a shape within a group to another shape within the group', () => {
@@ -1640,10 +1638,11 @@ describe('bindings', () => {
 		// go from A to B
 		editor.pointerDown(5, 5).pointerMove(25, 5).pointerUp()
 		const arrow = onlySelectedShape() as TLArrowShape
+		const bindings = getArrowBindings(editor, arrow)
 
 		expect(arrow.parentId).toBe(groupAId)
-		expect(arrow.props.start).toMatchObject({ boundShapeId: ids.boxA })
-		expect(arrow.props.end).toMatchObject({ boundShapeId: ids.boxB })
+		expect(bindings.start).toMatchObject({ toId: ids.boxA })
+		expect(bindings.end).toMatchObject({ toId: ids.boxB })
 	})
 
 	it('can be made from a shape outside of a group to a shape within the group', () => {
@@ -1651,10 +1650,11 @@ describe('bindings', () => {
 		// go from E to B
 		editor.pointerDown(5, 25).pointerMove(27, 7).pointerMove(25, 5).pointerUp()
 		const arrow = onlySelectedShape() as TLArrowShape
+		const bindings = getArrowBindings(editor, arrow)
 
 		expect(arrow.parentId).toBe(editor.getCurrentPageId())
-		expect(arrow.props.start).toMatchObject({ boundShapeId: ids.boxE })
-		expect(arrow.props.end).toMatchObject({ boundShapeId: ids.boxB })
+		expect(bindings.start).toMatchObject({ toId: ids.boxE })
+		expect(bindings.end).toMatchObject({ toId: ids.boxB })
 	})
 })
 
@@ -1723,20 +1723,17 @@ describe('moving handles within a group', () => {
 		editor.pointerDown(50, 50).pointerMove(60, 60).pointerUp(60, 60)
 
 		let arrow = onlySelectedShape() as TLArrowShape
+		let bindings = getArrowBindings(editor, arrow)
 
 		expect(arrow.parentId).toBe(groupA.id)
 
-		expect(arrow.props.start.type).toBe('point')
-		if (arrow.props.start.type === 'point') {
-			expect(arrow.props.start.x).toBe(0)
-			expect(arrow.props.start.y).toBe(0)
-		}
+		expect(bindings.start).toBeUndefined()
+		expect(arrow.props.start.x).toBe(0)
+		expect(arrow.props.start.y).toBe(0)
 
-		expect(arrow.props.end.type).toBe('point')
-		if (arrow.props.end.type === 'point') {
-			expect(arrow.props.end.x).toBe(10)
-			expect(arrow.props.end.y).toBe(10)
-		}
+		expect(bindings.end).toBeUndefined()
+		expect(arrow.props.end.x).toBe(10)
+		expect(arrow.props.end.y).toBe(10)
 
 		editor.expectToBeIn('select.idle')
 
@@ -1759,20 +1756,17 @@ describe('moving handles within a group', () => {
 		editor.pointerMove(60, -10)
 
 		arrow = editor.getShape(arrow.id)!
+		bindings = getArrowBindings(editor, arrow)
 
 		expect(arrow.parentId).toBe(groupA.id)
 
-		expect(arrow.props.start.type).toBe('point')
-		if (arrow.props.start.type === 'point') {
-			expect(arrow.props.start.x).toBe(0)
-			expect(arrow.props.start.y).toBe(0)
-		}
+		expect(bindings.start).toBeUndefined()
+		expect(arrow.props.start.x).toBe(0)
+		expect(arrow.props.start.y).toBe(0)
 
-		expect(arrow.props.end.type).toBe('point')
-		if (arrow.props.end.type === 'point') {
-			expect(arrow.props.end.x).toBe(10)
-			expect(arrow.props.end.y).toBe(-60)
-		}
+		expect(bindings.end).toBeUndefined()
+		expect(arrow.props.end.x).toBe(10)
+		expect(arrow.props.end.y).toBe(-60)
 
 		expect(editor.getShapePageBounds(groupA.id)).toCloselyMatchObject({
 			x: 0,
@@ -1926,14 +1920,14 @@ describe('snapping', () => {
 		editor.select(groupCId)
 		editor.pointerDown(10, 5, groupCId)
 		editor.pointerMove(80, 5, groupCId, { ctrlKey: true })
-		expect(editor.snaps.getLines().length).toBe(0)
+		expect(editor.snaps.getIndicators().length).toBe(0)
 	})
 
 	it('does not happen between children and thier group', () => {
 		editor.select(ids.boxD)
 		editor.pointerDown(65, 5, ids.boxD)
 		editor.pointerMove(80, 105, ids.boxD, { ctrlKey: true })
-		expect(editor.snaps.getLines().length).toBe(0)
+		expect(editor.snaps.getIndicators().length).toBe(0)
 	})
 })
 
@@ -1976,7 +1970,7 @@ describe('Group opacity', () => {
 describe('Grouping / ungrouping locked shapes', () => {
 	it('keeps locked shapes locked when grouped', () => {
 		editor.createShapes([box(ids.boxA, 0, 0), box(ids.boxB, 200, 0)])
-		editor.groupShapes([ids.boxA, ids.boxB], ids.groupA)
+		editor.groupShapes([ids.boxA, ids.boxB], { groupId: ids.groupA })
 		editor.select(ids.boxA)
 
 		// Lock boxA

@@ -1,10 +1,10 @@
 import { TLScribble, VecModel } from '@tldraw/tlschema'
+import { uniqueId } from '@tldraw/utils'
 import { Vec } from '../../primitives/Vec'
-import { uniqueId } from '../../utils/uniqueId'
 import { Editor } from '../Editor'
-import { TLTickEvent } from '../types/event-types'
 
-type ScribbleItem = {
+/** @public */
+export interface ScribbleItem {
 	id: string
 	scribble: TLScribble
 	timeoutMs: number
@@ -20,7 +20,7 @@ export class ScribbleManager {
 
 	constructor(private editor: Editor) {}
 
-	addScribble = (scribble: Partial<TLScribble>, id = uniqueId()) => {
+	addScribble(scribble: Partial<TLScribble>, id = uniqueId()) {
 		const item: ScribbleItem = {
 			id,
 			scribble: {
@@ -41,26 +41,12 @@ export class ScribbleManager {
 			next: null,
 		}
 		this.scribbleItems.set(id, item)
-		if (this.state === 'paused') {
-			this.resume()
-		}
 		return item
-	}
-
-	resume() {
-		this.state = 'running'
-		this.editor.addListener('tick', this.tick)
-	}
-
-	pause() {
-		this.editor.removeListener('tick', this.tick)
-		this.state = 'paused'
 	}
 
 	reset() {
 		this.editor.updateInstanceState({ scribbles: [] })
 		this.scribbleItems.clear()
-		this.pause()
 	}
 
 	/**
@@ -68,7 +54,7 @@ export class ScribbleManager {
 	 *
 	 * @public
 	 */
-	stop = (id: ScribbleItem['id']) => {
+	stop(id: ScribbleItem['id']) {
 		const item = this.scribbleItems.get(id)
 		if (!item) throw Error(`Scribble with id ${id} not found`)
 		item.delayRemaining = Math.min(item.delayRemaining, 200)
@@ -79,14 +65,17 @@ export class ScribbleManager {
 	/**
 	 * Set the scribble's next point.
 	 *
-	 * @param point - The point to add.
+	 * @param id - The id of the scribble to add a point to.
+	 * @param x - The x coordinate of the point.
+	 * @param y - The y coordinate of the point.
+	 * @param z - The z coordinate of the point.
 	 * @public
 	 */
-	addPoint = (id: ScribbleItem['id'], x: number, y: number) => {
+	addPoint(id: ScribbleItem['id'], x: number, y: number, z = 0.5) {
 		const item = this.scribbleItems.get(id)
 		if (!item) throw Error(`Scribble with id ${id} not found`)
 		const { prev } = item
-		const point = { x, y, z: 0.5 }
+		const point = { x, y, z }
 		if (!prev || Vec.Dist(prev, point) >= 1) {
 			item.next = point
 		}
@@ -99,8 +88,9 @@ export class ScribbleManager {
 	 * @param elapsed - The number of milliseconds since the last tick.
 	 * @public
 	 */
-	tick: TLTickEvent = (elapsed) => {
-		this.editor.batch(() => {
+	tick(elapsed: number) {
+		if (this.scribbleItems.size === 0) return
+		this.editor.run(() => {
 			this.scribbleItems.forEach((item) => {
 				// let the item get at least eight points before
 				//  switching from starting to active
@@ -190,11 +180,6 @@ export class ScribbleManager {
 					}))
 					.slice(-5), // limit to three as a minor sanity check
 			})
-
-			// If we've removed all the scribbles, stop ticking
-			if (this.scribbleItems.size === 0) {
-				this.pause()
-			}
 		})
 	}
 }

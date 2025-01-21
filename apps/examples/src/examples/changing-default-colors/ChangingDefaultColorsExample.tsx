@@ -1,5 +1,5 @@
-import { DefaultColorThemePalette, Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { DefaultColorThemePalette, Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
 
 // There's a guide at the bottom of this file!
 
@@ -9,7 +9,7 @@ DefaultColorThemePalette.lightMode.black.solid = 'aqua'
 export default function ChangingDefaultColorsExample() {
 	return (
 		<div className="tldraw__editor">
-			<Tldraw persistenceKey="tldraw_example" />
+			<Tldraw persistenceKey="example" />
 		</div>
 	)
 }

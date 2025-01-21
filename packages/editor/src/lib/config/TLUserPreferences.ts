@@ -1,8 +1,7 @@
 import { atom } from '@tldraw/state'
-import { defineMigrations, migrate } from '@tldraw/store'
 import { getDefaultTranslationLocale } from '@tldraw/tlschema'
+import { getFromLocalStorage, setInLocalStorage, structuredClone, uniqueId } from '@tldraw/utils'
 import { T } from '@tldraw/validate'
-import { uniqueId } from '../utils/uniqueId'
 
 const USER_DATA_KEY = 'TLDRAW_USER_DATA_v3'
 
@@ -14,12 +13,16 @@ const USER_DATA_KEY = 'TLDRAW_USER_DATA_v3'
 export interface TLUserPreferences {
 	id: string
 	name?: string | null
-	locale?: string | null
 	color?: string | null
-	isDarkMode?: boolean | null
+	// N.B. These are duplicated in TLdrawAppUser.
+	locale?: string | null
 	animationSpeed?: number | null
 	edgeScrollSpeed?: number | null
+	colorScheme?: 'light' | 'dark' | 'system'
 	isSnapMode?: boolean | null
+	isWrapMode?: boolean | null
+	isDynamicSizeMode?: boolean | null
+	isPasteAtCursorMode?: boolean | null
 }
 
 interface UserDataSnapshot {
@@ -33,15 +36,20 @@ interface UserChangeBroadcastMessage {
 	data: UserDataSnapshot
 }
 
-const userTypeValidator: T.Validator<TLUserPreferences> = T.object<TLUserPreferences>({
+/** @public */
+export const userTypeValidator: T.Validator<TLUserPreferences> = T.object<TLUserPreferences>({
 	id: T.string,
 	name: T.string.nullable().optional(),
-	locale: T.string.nullable().optional(),
 	color: T.string.nullable().optional(),
-	isDarkMode: T.boolean.nullable().optional(),
+	// N.B. These are duplicated in TLdrawAppUser.
+	locale: T.string.nullable().optional(),
 	animationSpeed: T.number.nullable().optional(),
 	edgeScrollSpeed: T.number.nullable().optional(),
+	colorScheme: T.literalEnum('light', 'dark', 'system').optional(),
 	isSnapMode: T.boolean.nullable().optional(),
+	isWrapMode: T.boolean.nullable().optional(),
+	isDynamicSizeMode: T.boolean.nullable().optional(),
+	isPasteAtCursorMode: T.boolean.nullable().optional(),
 })
 
 const Versions = {
@@ -49,59 +57,49 @@ const Versions = {
 	AddIsSnapMode: 2,
 	MakeFieldsNullable: 3,
 	AddEdgeScrollSpeed: 4,
+	AddExcalidrawSelectMode: 5,
+	AddDynamicSizeMode: 6,
+	AllowSystemColorScheme: 7,
+	AddPasteAtCursor: 8,
 } as const
 
-const userMigrations = defineMigrations({
-	currentVersion: Versions.AddEdgeScrollSpeed,
-	migrators: {
-		[Versions.AddAnimationSpeed]: {
-			up: (user) => {
-				return {
-					...user,
-					animationSpeed: 1,
-				}
-			},
-			down: ({ animationSpeed: _, ...user }) => {
-				return user
-			},
-		},
-		[Versions.AddIsSnapMode]: {
-			up: (user: TLUserPreferences) => {
-				return { ...user, isSnapMode: false }
-			},
-			down: ({ isSnapMode: _, ...user }: TLUserPreferences) => {
-				return user
-			},
-		},
-		[Versions.MakeFieldsNullable]: {
-			up: (user: TLUserPreferences) => {
-				return user
-			},
-			down: (user: TLUserPreferences) => {
-				return {
-					id: user.id,
-					name: user.name ?? defaultUserPreferences.name,
-					locale: user.locale ?? defaultUserPreferences.locale,
-					color: user.color ?? defaultUserPreferences.color,
-					isDarkMode: user.isDarkMode ?? defaultUserPreferences.isDarkMode,
-					animationSpeed: user.animationSpeed ?? defaultUserPreferences.animationSpeed,
-					isSnapMode: user.isSnapMode ?? defaultUserPreferences.isSnapMode,
-				}
-			},
-		},
-		[Versions.AddEdgeScrollSpeed]: {
-			up: (user: TLUserPreferences) => {
-				return {
-					...user,
-					edgeScrollSpeed: 1,
-				}
-			},
-			down: ({ edgeScrollSpeed: _, ...user }: TLUserPreferences) => {
-				return user
-			},
-		},
-	},
-})
+const CURRENT_VERSION = Math.max(...Object.values(Versions))
+
+function migrateSnapshot(data: { version: number; user: any }) {
+	if (data.version < Versions.AddAnimationSpeed) {
+		data.user.animationSpeed = 1
+	}
+	if (data.version < Versions.AddIsSnapMode) {
+		data.user.isSnapMode = false
+	}
+	if (data.version < Versions.MakeFieldsNullable) {
+		// noop
+	}
+	if (data.version < Versions.AddEdgeScrollSpeed) {
+		data.user.edgeScrollSpeed = 1
+	}
+	if (data.version < Versions.AddExcalidrawSelectMode) {
+		data.user.isWrapMode = false
+	}
+	if (data.version < Versions.AllowSystemColorScheme) {
+		if (data.user.isDarkMode === true) {
+			data.user.colorScheme = 'dark'
+		} else if (data.user.isDarkMode === false) {
+			data.user.colorScheme = 'light'
+		}
+		delete data.user.isDarkMode
+	}
+
+	if (data.version < Versions.AddDynamicSizeMode) {
+		data.user.isDynamicSizeMode = false
+	}
+	if (data.version < Versions.AddPasteAtCursor) {
+		data.user.isPasteAtCursorMode = false
+	}
+
+	// finally
+	data.version = CURRENT_VERSION
+}
 
 /** @internal */
 export const USER_COLORS = [
@@ -124,19 +122,12 @@ function getRandomColor() {
 }
 
 /** @internal */
-export function userPrefersDarkUI() {
-	if (typeof window === 'undefined') {
-		return false
-	}
-	return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false
-}
-
-/** @internal */
 export function userPrefersReducedMotion() {
-	if (typeof window === 'undefined') {
-		return false
+	if (typeof window !== 'undefined' && 'matchMedia' in window) {
+		return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 	}
-	return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
+
+	return false
 }
 
 /** @public */
@@ -144,20 +135,26 @@ export const defaultUserPreferences = Object.freeze({
 	name: 'New User',
 	locale: getDefaultTranslationLocale(),
 	color: getRandomColor(),
-	isDarkMode: false,
+
+	// N.B. These are duplicated in TLdrawAppUser.
 	edgeScrollSpeed: 1,
 	animationSpeed: userPrefersReducedMotion() ? 0 : 1,
 	isSnapMode: false,
+	isWrapMode: false,
+	isDynamicSizeMode: false,
+	isPasteAtCursorMode: false,
+	colorScheme: 'light',
 }) satisfies Readonly<Omit<TLUserPreferences, 'id'>>
 
 /** @public */
 export function getFreshUserPreferences(): TLUserPreferences {
 	return {
 		id: uniqueId(),
+		color: getRandomColor(),
 	}
 }
 
-function migrateUserPreferences(userData: unknown) {
+function migrateUserPreferences(userData: unknown): TLUserPreferences {
 	if (userData === null || typeof userData !== 'object') {
 		return getFreshUserPreferences()
 	}
@@ -166,48 +163,34 @@ function migrateUserPreferences(userData: unknown) {
 		return getFreshUserPreferences()
 	}
 
-	const migrationResult = migrate<TLUserPreferences>({
-		value: userData.user,
-		fromVersion: userData.version,
-		toVersion: userMigrations.currentVersion ?? 0,
-		migrations: userMigrations,
-	})
+	const snapshot = structuredClone(userData) as any
 
-	if (migrationResult.type === 'error') {
-		return getFreshUserPreferences()
-	}
+	migrateSnapshot(snapshot)
 
 	try {
-		userTypeValidator.validate(migrationResult.value)
-	} catch (e) {
+		return userTypeValidator.validate(snapshot.user)
+	} catch {
 		return getFreshUserPreferences()
 	}
-
-	return migrationResult.value
 }
 
 function loadUserPreferences(): TLUserPreferences {
-	const userData =
-		typeof window === 'undefined'
-			? null
-			: ((JSON.parse(window?.localStorage?.getItem(USER_DATA_KEY) || 'null') ??
-					null) as null | UserDataSnapshot)
+	const userData = (JSON.parse(getFromLocalStorage(USER_DATA_KEY) || 'null') ??
+		null) as null | UserDataSnapshot
 
 	return migrateUserPreferences(userData)
 }
 
-const globalUserPreferences = atom<TLUserPreferences>('globalUserData', loadUserPreferences())
+const globalUserPreferences = atom<TLUserPreferences | null>('globalUserData', null)
 
 function storeUserPreferences() {
-	if (typeof window !== 'undefined' && window.localStorage) {
-		window.localStorage.setItem(
-			USER_DATA_KEY,
-			JSON.stringify({
-				version: userMigrations.currentVersion,
-				user: globalUserPreferences.get(),
-			})
-		)
-	}
+	setInLocalStorage(
+		USER_DATA_KEY,
+		JSON.stringify({
+			version: CURRENT_VERSION,
+			user: globalUserPreferences.get(),
+		})
+	)
 }
 
 /** @public */
@@ -227,26 +210,37 @@ const channel =
 
 channel?.addEventListener('message', (e) => {
 	const data = e.data as undefined | UserChangeBroadcastMessage
-	if (data?.type === broadcastEventKey && data?.origin !== broadcastOrigin) {
+	if (data?.type === broadcastEventKey && data?.origin !== getBroadcastOrigin()) {
 		globalUserPreferences.set(migrateUserPreferences(data.data))
 	}
 })
 
-const broadcastOrigin = uniqueId()
+let _broadcastOrigin = null as null | string
+function getBroadcastOrigin() {
+	if (_broadcastOrigin === null) {
+		_broadcastOrigin = uniqueId()
+	}
+	return _broadcastOrigin
+}
 const broadcastEventKey = 'tldraw-user-preferences-change' as const
 
 function broadcastUserPreferencesChange() {
 	channel?.postMessage({
 		type: broadcastEventKey,
-		origin: broadcastOrigin,
+		origin: getBroadcastOrigin(),
 		data: {
-			user: globalUserPreferences.get(),
-			version: userMigrations.currentVersion,
+			user: getUserPreferences(),
+			version: CURRENT_VERSION,
 		},
 	} satisfies UserChangeBroadcastMessage)
 }
 
 /** @public */
-export function getUserPreferences() {
-	return globalUserPreferences.get()
+export function getUserPreferences(): TLUserPreferences {
+	let prefs = globalUserPreferences.get()
+	if (!prefs) {
+		prefs = loadUserPreferences()
+		setUserPreferences(prefs)
+	}
+	return prefs
 }

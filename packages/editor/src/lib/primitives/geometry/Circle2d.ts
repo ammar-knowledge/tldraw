@@ -49,8 +49,13 @@ export class Circle2d extends Geometry2d {
 		return _center.clone().add(point.clone().sub(_center).uni().mul(radius))
 	}
 
-	hitTestLineSegment(A: Vec, B: Vec, _zoom: number): boolean {
+	hitTestLineSegment(A: Vec, B: Vec, distance = 0): boolean {
 		const { _center, radius } = this
-		return intersectLineSegmentCircle(A, B, _center, radius) !== null
+		return intersectLineSegmentCircle(A, B, _center, radius + distance) !== null
+	}
+
+	getSvgPathData(): string {
+		const { _center, radius } = this
+		return `M${_center.x + radius},${_center.y} a${radius},${radius} 0 1,0 ${radius * 2},0a${radius},${radius} 0 1,0 -${radius * 2},0`
 	}
 }

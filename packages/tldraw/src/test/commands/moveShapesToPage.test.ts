@@ -1,4 +1,4 @@
-import { PageRecordType, TLShape, createShapeId } from '@tldraw/editor'
+import { IndexKey, PageRecordType, TLShape, createShapeId } from '@tldraw/editor'
 import { TestEditor } from '../TestEditor'
 
 let editor: TestEditor
@@ -59,27 +59,28 @@ describe('Editor.moveShapesToPage', () => {
 	})
 
 	it('Adds undo items', () => {
-		editor.history.clear()
+		editor.getHistory().clear()
+		expect(editor.getHistory().getNumUndos()).toBe(0)
 		editor.moveShapesToPage([ids.box1], ids.page2)
-		expect(editor.history.getNumUndos()).toBeGreaterThan(1)
+		expect(editor.getHistory().getNumUndos()).toBe(1)
 	})
 
 	it('Does nothing on an empty ids array', () => {
-		editor.history.clear()
+		editor.getHistory().clear()
 		editor.moveShapesToPage([], ids.page2)
-		expect(editor.history.getNumUndos()).toBe(0)
+		expect(editor.getHistory().getNumUndos()).toBe(0)
 	})
 
 	it('Does nothing if the new page is not found or is deleted', () => {
-		editor.history.clear()
+		editor.getHistory().clear()
 		editor.moveShapesToPage([ids.box1], PageRecordType.createId('missing'))
-		expect(editor.history.getNumUndos()).toBe(0)
+		expect(editor.getHistory().getNumUndos()).toBe(0)
 	})
 
 	it('Does not move shapes to the current page', () => {
-		editor.history.clear()
+		editor.getHistory().clear()
 		editor.moveShapesToPage([ids.box1], ids.page1)
-		expect(editor.history.getNumUndos()).toBe(0)
+		expect(editor.getHistory().getNumUndos()).toBe(0)
 	})
 
 	it('Restores on undo / redo', () => {
@@ -90,7 +91,7 @@ describe('Editor.moveShapesToPage', () => {
 			ids.ellipse1,
 		])
 
-		editor.mark('move shapes to page')
+		editor.markHistoryStoppingPoint('move shapes to page')
 		editor.moveShapesToPage([ids.box2], ids.page2)
 
 		expect(editor.getCurrentPageId()).toBe(ids.page2)
@@ -122,7 +123,7 @@ describe('Editor.moveShapesToPage', () => {
 		editor.expectShapeToMatch({
 			id: ids.box1,
 			parentId: page2Id,
-			index: 'a1',
+			index: 'a1' as IndexKey,
 		})
 
 		const page3Id = PageRecordType.createId('newPage3')
@@ -134,7 +135,7 @@ describe('Editor.moveShapesToPage', () => {
 		editor.expectShapeToMatch({
 			id: ids.box2,
 			parentId: page3Id,
-			index: 'a1',
+			index: 'a1' as IndexKey,
 		})
 
 		editor.setCurrentPage(page2Id)
@@ -147,12 +148,12 @@ describe('Editor.moveShapesToPage', () => {
 			{
 				id: ids.box2,
 				parentId: page3Id,
-				index: 'a1',
+				index: 'a1' as IndexKey,
 			},
 			{
 				id: ids.box1,
 				parentId: page3Id,
-				index: 'a2', // should be a2 now
+				index: 'a2' as IndexKey, // should be a2 now
 			}
 		)
 	})
@@ -220,7 +221,7 @@ describe('arrows', () => {
 		expect(editor.getShapePageBounds(arrow)).toCloselyMatchObject({
 			x: 300,
 			y: 250,
-			w: 150,
+			w: 86.5,
 			h: 0,
 		})
 	})

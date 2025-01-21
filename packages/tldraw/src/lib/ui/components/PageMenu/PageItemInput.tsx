@@ -1,46 +1,59 @@
 import { TLPageId, useEditor } from '@tldraw/editor'
 import { useCallback, useRef } from 'react'
-import { Input } from '../primitives/Input'
+import { useUiEvents } from '../../context/events'
+import { TldrawUiInput } from '../primitives/TldrawUiInput'
 
+/** @public */
+export interface PageItemInputProps {
+	name: string
+	id: TLPageId
+	isCurrentPage: boolean
+	onCancel(): void
+}
+
+/** @public @react */
 export const PageItemInput = function PageItemInput({
 	name,
 	id,
 	isCurrentPage,
-}: {
-	name: string
-	id: TLPageId
-	isCurrentPage: boolean
-}) {
+	onCancel,
+}: PageItemInputProps) {
 	const editor = useEditor()
+	const trackEvent = useUiEvents()
 
 	const rInput = useRef<HTMLInputElement | null>(null)
+	const rMark = useRef<string | null>(null)
+
+	const handleFocus = useCallback(() => {
+		rMark.current = editor.markHistoryStoppingPoint('rename page')
+	}, [editor])
 
 	const handleChange = useCallback(
 		(value: string) => {
-			editor.renamePage(id, value ? value : 'New Page', { ephemeral: true })
+			editor.renamePage(id, value || 'New Page')
+			trackEvent('rename-page', { source: 'page-menu' })
 		},
-		[editor, id]
+		[editor, id, trackEvent]
 	)
 
-	const handleComplete = useCallback(
-		(value: string) => {
-			editor.mark('rename page')
-			editor.renamePage(id, value || 'New Page', { ephemeral: false })
-		},
-		[editor, id]
-	)
+	const handleCancel = useCallback(() => {
+		if (rMark.current) {
+			editor.bailToMark(rMark.current)
+		}
+		onCancel()
+	}, [editor, onCancel])
 
 	return (
-		<Input
+		<TldrawUiInput
 			className="tlui-page-menu__item__input"
 			ref={(el) => (rInput.current = el)}
 			defaultValue={name}
 			onValueChange={handleChange}
-			onComplete={handleComplete}
-			onCancel={handleComplete}
+			onCancel={handleCancel}
+			onFocus={handleFocus}
 			shouldManuallyMaintainScrollPositionWhenFocused
-			autofocus={isCurrentPage}
-			autoselect
+			autoFocus={isCurrentPage}
+			autoSelect
 		/>
 	)
 }

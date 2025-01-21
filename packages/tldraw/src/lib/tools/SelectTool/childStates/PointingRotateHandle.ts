@@ -1,4 +1,4 @@
-import { RotateCorner, StateNode, TLEventHandlers, TLPointerEventInfo } from '@tldraw/editor'
+import { RotateCorner, StateNode, TLPointerEventInfo } from '@tldraw/editor'
 import { CursorTypeMap } from './PointingResizeHandle'
 
 type PointingRotateHandleInfo = Extract<TLPointerEventInfo, { target: 'selection' }> & {
@@ -11,50 +11,51 @@ export class PointingRotateHandle extends StateNode {
 	private info = {} as PointingRotateHandleInfo
 
 	private updateCursor() {
-		const selectionRotation = this.editor.getSelectionRotation()
-		this.editor.updateInstanceState({
-			cursor: {
-				type: CursorTypeMap[this.info.handle as RotateCorner],
-				rotation: selectionRotation,
-			},
+		this.editor.setCursor({
+			type: CursorTypeMap[this.info.handle as RotateCorner],
+			rotation: this.editor.getSelectionRotation(),
 		})
 	}
 
-	override onEnter = (info: PointingRotateHandleInfo) => {
+	override onEnter(info: PointingRotateHandleInfo) {
 		this.parent.setCurrentToolIdMask(info.onInteractionEnd)
 		this.info = info
 		this.updateCursor()
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.parent.setCurrentToolIdMask(undefined)
-		this.editor.updateInstanceState(
-			{ cursor: { type: 'default', rotation: 0 } },
-			{ ephemeral: true }
-		)
+		this.editor.setCursor({ type: 'default', rotation: 0 })
 	}
 
-	override onPointerMove = () => {
-		const { isDragging } = this.editor.inputs
-
-		if (isDragging) {
-			this.parent.transition('rotating', this.info)
+	override onPointerMove() {
+		if (this.editor.inputs.isDragging) {
+			this.startRotating()
 		}
 	}
 
-	override onPointerUp = () => {
+	override onLongPress() {
+		this.startRotating()
+	}
+
+	private startRotating() {
+		if (this.editor.getIsReadonly()) return
+		this.parent.transition('rotating', this.info)
+	}
+
+	override onPointerUp() {
 		this.complete()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.cancel()
 	}
 
-	override onInterrupt = () => {
+	override onInterrupt() {
 		this.cancel()
 	}
 

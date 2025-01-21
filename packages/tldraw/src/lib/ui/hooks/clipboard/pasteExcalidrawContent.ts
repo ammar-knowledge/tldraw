@@ -11,16 +11,18 @@ import {
 	TLDefaultFontStyle,
 	TLDefaultHorizontalAlignStyle,
 	TLDefaultSizeStyle,
+	TLDefaultTextAlignStyle,
 	TLOpacityType,
 	TLShapeId,
 	Vec,
 	VecLike,
+	ZERO_INDEX_KEY,
 	compact,
+	createBindingId,
 	createShapeId,
 	getIndexAbove,
 	getIndices,
 	isShapeId,
-	uniqueId,
 } from '@tldraw/editor'
 
 /**
@@ -36,6 +38,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 
 	const tldrawContent: TLContent = {
 		shapes: [],
+		bindings: [],
 		rootShapeIds: [],
 		assets: [],
 		schema: editor.store.schema.serialize(),
@@ -63,7 +66,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 		}
 	})
 
-	let index = 'a1'
+	let index = ZERO_INDEX_KEY
 
 	for (const element of elements) {
 		if (skipIds.has(element.id)) {
@@ -117,6 +120,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 						}
 					}
 				}
+
 				const colorToUse =
 					element.backgroundColor === 'transparent' ? element.strokeColor : element.backgroundColor
 
@@ -161,8 +165,10 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 				break
 			}
 			case 'line': {
-				const start = element.points[0]
-				const end = element.points[element.points.length - 1]
+				const points = element.points.slice()
+				if (points.length < 2) {
+					break
+				}
 				const indices = getIndices(element.points.length)
 
 				tldrawContent.shapes.push({
@@ -173,39 +179,17 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 						size: strokeWidthsToSizes[element.strokeWidth],
 						color: colorsToColors[element.strokeColor] ?? 'black',
 						spline: element.roundness ? 'cubic' : 'line',
-						handles: {
-							start: {
-								id: 'start',
-								type: 'vertex',
-								index: indices[0],
-								x: start[0],
-								y: start[1],
-							},
-							end: {
-								id: 'end',
-								type: 'vertex',
-								index: indices[indices.length - 1],
-								x: end[0],
-								y: end[1],
-							},
+						points: {
 							...Object.fromEntries(
-								element.points.slice(1, -1).map(([x, y]: number[], i: number) => {
-									const id = uniqueId()
-									return [
-										id,
-										{
-											id,
-											type: 'vertex',
-											index: indices[i + 1],
-											x,
-											y,
-										},
-									]
+								element.points.map(([x, y]: number[], i: number) => {
+									const index = indices[i]
+									return [index, { id: index, index, x, y }]
 								})
 							),
 						},
 					},
 				})
+
 				break
 			}
 			case 'arrow': {
@@ -237,36 +221,45 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 						dash: getDash(element),
 						size: strokeWidthsToSizes[element.strokeWidth] ?? 'm',
 						color: colorsToColors[element.strokeColor] ?? 'black',
-						start: startTargetId
-							? {
-									type: 'binding',
-									boundShapeId: startTargetId,
-									normalizedAnchor: { x: 0.5, y: 0.5 },
-									isPrecise: false,
-									isExact: false,
-								}
-							: {
-									type: 'point',
-									x: start[0],
-									y: start[1],
-								},
-						end: endTargetId
-							? {
-									type: 'binding',
-									boundShapeId: endTargetId,
-									normalizedAnchor: { x: 0.5, y: 0.5 },
-									isPrecise: false,
-									isExact: false,
-								}
-							: {
-									type: 'point',
-									x: end[0],
-									y: end[1],
-								},
+						start: { x: start[0], y: start[1] },
+						end: { x: end[0], y: end[1] },
 						arrowheadEnd: arrowheadsToArrowheadTypes[element.endArrowhead] ?? 'none',
 						arrowheadStart: arrowheadsToArrowheadTypes[element.startArrowhead] ?? 'none',
 					},
 				})
+
+				if (startTargetId) {
+					tldrawContent.bindings!.push({
+						id: createBindingId(),
+						typeName: 'binding',
+						type: 'arrow',
+						fromId: id,
+						toId: startTargetId,
+						props: {
+							terminal: 'start',
+							normalizedAnchor: { x: 0.5, y: 0.5 },
+							isPrecise: false,
+							isExact: false,
+						},
+						meta: {},
+					})
+				}
+				if (endTargetId) {
+					tldrawContent.bindings!.push({
+						id: createBindingId(),
+						typeName: 'binding',
+						type: 'arrow',
+						fromId: id,
+						toId: endTargetId,
+						props: {
+							terminal: 'end',
+							normalizedAnchor: { x: 0.5, y: 0.5 },
+							isPrecise: false,
+							isExact: false,
+						},
+						meta: {},
+					})
+				}
 				break
 			}
 			case 'text': {
@@ -281,7 +274,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 						font: fontFamilyToFontType[element.fontFamily] ?? 'draw',
 						color: colorsToColors[element.strokeColor] ?? 'black',
 						text: element.text,
-						align: textAlignToAlignTypes[element.textAlign],
+						textAlign: textAlignToTextAlignTypes[element.textAlign],
 					},
 				})
 				break
@@ -298,6 +291,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 					props: {
 						w: element.width,
 						h: element.height,
+						fileSize: file.size,
 						name: element.id ?? 'Untitled',
 						isAnimated: false,
 						mimeType: file.mimeType,
@@ -323,7 +317,7 @@ export async function pasteExcalidrawContent(editor: Editor, clipboard: any, poi
 
 	const p = point ?? (editor.inputs.shiftKey ? editor.inputs.currentPagePoint : undefined)
 
-	editor.mark('paste')
+	editor.markHistoryStoppingPoint('paste')
 
 	editor.putContentOntoCurrentPage(tldrawContent, {
 		point: p,
@@ -417,40 +411,44 @@ const fontFamilyToFontType: Record<number, TLDefaultFontStyle> = {
 	3: 'mono',
 }
 
+const oc = {
+	gray: ['#f8f9fa', '#e9ecef', '#ced4da', '#868e96', '#343a40'],
+	red: ['#fff5f5', '#ffc9c9', '#ff8787', '#fa5252', '#e03131'],
+	pink: ['#fff0f6', '#fcc2d7', '#f783ac', '#e64980', '#c2255c'],
+	grape: ['#f8f0fc', '#eebefa', '#da77f2', '#be4bdb', '#9c36b5'],
+	violet: ['#f3f0ff', '#d0bfff', '#9775fa', '#7950f2', '#6741d9'],
+	indigo: ['#edf2ff', '#bac8ff', '#748ffc', '#4c6ef5', '#3b5bdb'],
+	blue: ['#e7f5ff', '#a5d8ff', '#4dabf7', '#228be6', '#1971c2'],
+	cyan: ['#e3fafc', '#99e9f2', '#3bc9db', '#15aabf', '#0c8599'],
+	teal: ['#e6fcf5', '#96f2d7', '#38d9a9', '#12b886', '#099268'],
+	green: ['#ebfbee', '#b2f2bb', '#69db7c', '#40c057', '#2f9e44'],
+	lime: ['#f4fce3', '#d8f5a2', '#a9e34b', '#82c91e', '#66a80f'],
+	yellow: ['#fff9db', '#ffec99', '#ffd43b', '#fab005', '#f08c00'],
+	orange: ['#fff4e6', '#ffd8a8', '#ffa94d', '#fd7e14', '#e8590c'],
+}
+
+function mapExcalidrawColorToTldrawColors(
+	excalidrawColor: keyof typeof oc,
+	light: TLDefaultColorStyle,
+	dark: TLDefaultColorStyle
+) {
+	const colors = [0, 1, 2, 3, 4].map((index) => oc[excalidrawColor][index])
+	return Object.fromEntries(colors.map((c, i) => [c, i < 3 ? light : dark]))
+}
+
 const colorsToColors: Record<string, TLDefaultColorStyle> = {
-	'#ffffff': 'grey',
-	// Strokes
+	...mapExcalidrawColorToTldrawColors('gray', 'grey', 'black'),
+	...mapExcalidrawColorToTldrawColors('red', 'light-red', 'red'),
+	...mapExcalidrawColorToTldrawColors('pink', 'light-red', 'red'),
+	...mapExcalidrawColorToTldrawColors('grape', 'light-violet', 'violet'),
+	...mapExcalidrawColorToTldrawColors('blue', 'light-blue', 'blue'),
+	...mapExcalidrawColorToTldrawColors('cyan', 'light-blue', 'blue'),
+	...mapExcalidrawColorToTldrawColors('teal', 'light-green', 'green'),
+	...mapExcalidrawColorToTldrawColors('green', 'light-green', 'green'),
+	...mapExcalidrawColorToTldrawColors('yellow', 'yellow', 'orange'),
+	...mapExcalidrawColorToTldrawColors('orange', 'yellow', 'orange'),
+	'#ffffff': 'white',
 	'#000000': 'black',
-	'#343a40': 'black',
-	'#495057': 'grey',
-	'#c92a2a': 'red',
-	'#a61e4d': 'light-red',
-	'#862e9c': 'violet',
-	'#5f3dc4': 'light-violet',
-	'#364fc7': 'blue',
-	'#1864ab': 'light-blue',
-	'#0b7285': 'light-green',
-	'#087f5b': 'light-green',
-	'#2b8a3e': 'green',
-	'#5c940d': 'light-green',
-	'#e67700': 'yellow',
-	'#d9480f': 'orange',
-	// Backgrounds
-	'#ced4da': 'grey',
-	'#868e96': 'grey',
-	'#fa5252': 'light-red',
-	'#e64980': 'red',
-	'#be4bdb': 'light-violet',
-	'#7950f2': 'violet',
-	'#4c6ef5': 'blue',
-	'#228be6': 'light-blue',
-	'#15aabf': 'light-green',
-	'#12b886': 'green',
-	'#40c057': 'green',
-	'#82c91e': 'light-green',
-	'#fab005': 'yellow',
-	'#fd7e14': 'orange',
-	'#212529': 'grey',
 }
 
 const strokeStylesToStrokeTypes: Record<string, TLDefaultDashStyle> = {
@@ -466,6 +464,12 @@ const fillStylesToFillType: Record<string, TLDefaultFillStyle> = {
 }
 
 const textAlignToAlignTypes: Record<string, TLDefaultHorizontalAlignStyle> = {
+	left: 'start',
+	center: 'middle',
+	right: 'end',
+}
+
+const textAlignToTextAlignTypes: Record<string, TLDefaultTextAlignStyle> = {
 	left: 'start',
 	center: 'middle',
 	right: 'end',

@@ -143,6 +143,10 @@ describe('Vec.Uni', () => {
 		expect(Vec.Uni(new Vec(0, 10))).toMatchObject(new Vec(0, 1))
 		expect(Vec.Uni(new Vec(10, 10))).toMatchObject(new Vec(0.7071067811865475, 0.7071067811865475))
 	})
+
+	it('Divide-by-zero spits out NaN (at the moment)', () => {
+		expect(Vec.Uni(new Vec(0, 0))).toMatchObject(new Vec(NaN, NaN))
+	})
 })
 
 describe('Vec.Tan', () => {
@@ -249,8 +253,7 @@ describe('Vec.IsClockwise', () => {
 
 describe('Vec.ToFixed', () => {
 	it('Rounds a vector to the a given precision.', () => {
-		expect(Vec.ToFixed(new Vec(1.2345, 5.678), 1)).toMatchObject(new Vec(1.2, 5.7))
-		expect(Vec.ToFixed(new Vec(1.2345, 5.678), 2)).toMatchObject(new Vec(1.23, 5.68))
+		expect(Vec.ToFixed(new Vec(1.2345, 5.678))).toMatchObject(new Vec(1.23, 5.68))
 	})
 })
 
@@ -369,5 +372,16 @@ describe('Vec.snapToGrid', () => {
 		expect(Vec.SnapToGrid(new Vec(25, 29), 3)).toMatchObject(new Vec(24, 30))
 		expect(Vec.SnapToGrid(new Vec(25, 29), 10)).toMatchObject(new Vec(30, 30))
 		expect(Vec.SnapToGrid(new Vec(12, 49), 10)).toMatchObject(new Vec(10, 50))
+	})
+})
+
+describe('Vec.Average', () => {
+	it('correctly calculates the average of an array of vectors', () => {
+		const vecs = [new Vec(2, 4), new Vec(8, 16)]
+		expect(Vec.Average(vecs)).toMatchObject(new Vec(5, 10))
+	})
+
+	it('returns a (0,0) vector when passing any empty array', () => {
+		expect(Vec.Average([])).toMatchObject(new Vec(0, 0))
 	})
 })

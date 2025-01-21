@@ -1,6 +1,9 @@
-import { Editor, HIT_TEST_MARGIN, TLShape } from '@tldraw/editor'
+import { Editor, TLShape } from '@tldraw/editor'
 
-export function getHitShapeOnCanvasPointerDown(editor: Editor): TLShape | undefined {
+export function getHitShapeOnCanvasPointerDown(
+	editor: Editor,
+	hitLabels = false
+): TLShape | undefined {
 	const zoomLevel = editor.getZoomLevel()
 	const {
 		inputs: { currentPagePoint },
@@ -10,8 +13,8 @@ export function getHitShapeOnCanvasPointerDown(editor: Editor): TLShape | undefi
 		// hovered shape at point
 		editor.getShapeAtPoint(currentPagePoint, {
 			hitInside: false,
-			hitLabels: false,
-			margin: HIT_TEST_MARGIN / zoomLevel,
+			hitLabels,
+			margin: editor.options.hitTestMargin / zoomLevel,
 			renderingOnly: true,
 		}) ??
 		// selected shape at point

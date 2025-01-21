@@ -19,6 +19,7 @@ export class CubicBezier2d extends Polyline2d {
 	) {
 		const { start: a, cp1: b, cp2: c, end: d } = config
 		super({ ...config, points: [a, d] })
+
 		this.a = a
 		this.b = b
 		this.c = c
@@ -48,15 +49,17 @@ export class CubicBezier2d extends Polyline2d {
 	}
 
 	midPoint() {
-		return getAtT(this, 0.5)
+		return CubicBezier2d.GetAtT(this, 0.5)
 	}
 
 	nearestPoint(A: Vec): Vec {
 		let nearest: Vec | undefined
 		let dist = Infinity
+		let d: number
+		let p: Vec
 		for (const edge of this.segments) {
-			const p = edge.nearestPoint(A)
-			const d = p.dist(A)
+			p = edge.nearestPoint(A)
+			d = Vec.Dist2(p, A)
 			if (d < dist) {
 				nearest = p
 				dist = d
@@ -66,18 +69,35 @@ export class CubicBezier2d extends Polyline2d {
 		if (!nearest) throw Error('nearest point not found')
 		return nearest
 	}
-}
 
-function getAtT(segment: CubicBezier2d, t: number) {
-	const { a, b, c, d } = segment
-	return new Vec(
-		(1 - t) * (1 - t) * (1 - t) * a.x +
-			3 * ((1 - t) * (1 - t)) * t * b.x +
-			3 * (1 - t) * (t * t) * c.x +
-			t * t * t * d.x,
-		(1 - t) * (1 - t) * (1 - t) * a.y +
-			3 * ((1 - t) * (1 - t)) * t * b.y +
-			3 * (1 - t) * (t * t) * c.y +
-			t * t * t * d.y
-	)
+	getSvgPathData(first = true) {
+		const { a, b, c, d } = this
+		return `${first ? `M ${a.toFixed()} ` : ``} C${b.toFixed()} ${c.toFixed()} ${d.toFixed()}`
+	}
+
+	static GetAtT(segment: CubicBezier2d, t: number) {
+		const { a, b, c, d } = segment
+		return new Vec(
+			(1 - t) * (1 - t) * (1 - t) * a.x +
+				3 * ((1 - t) * (1 - t)) * t * b.x +
+				3 * (1 - t) * (t * t) * c.x +
+				t * t * t * d.x,
+			(1 - t) * (1 - t) * (1 - t) * a.y +
+				3 * ((1 - t) * (1 - t)) * t * b.y +
+				3 * (1 - t) * (t * t) * c.y +
+				t * t * t * d.y
+		)
+	}
+
+	override getLength(precision = 32) {
+		let n1: Vec,
+			p1 = this.a,
+			length = 0
+		for (let i = 1; i <= precision; i++) {
+			n1 = CubicBezier2d.GetAtT(this, i / precision)
+			length += Vec.Dist(p1, n1)
+			p1 = n1
+		}
+		return length
+	}
 }
