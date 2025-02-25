@@ -1,3 +1,382 @@
+# v3.8.0 (Wed Feb 12 2025)
+
+### Release Notes
+
+#### support react 19 ([#5293](https://github.com/tldraw/tldraw/pull/5293))
+
+- tldraw now supports react 19
+
+---
+
+#### 💄 Product Improvements
+
+- support react 19 [#5293](https://github.com/tldraw/tldraw/pull/5293) ([@SomeHats](https://github.com/SomeHats) [@mimecuvalo](https://github.com/mimecuvalo) [@huppy-bot[bot]](https://github.com/huppy-bot[bot]))
+
+#### Authors: 3
+
+- [@huppy-bot[bot]](https://github.com/huppy-bot[bot])
+- alex ([@SomeHats](https://github.com/SomeHats))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+
+---
+
+# v3.4.0 (Thu Oct 24 2024)
+
+### Release Notes
+
+#### npm: upgrade eslint v8 → v9 ([#4757](https://github.com/tldraw/tldraw/pull/4757))
+
+- Upgrade eslint v8 → v9
+
+---
+
+#### 🐛 Bug Fix
+
+- roll back changes from bad deploy [#4780](https://github.com/tldraw/tldraw/pull/4780) ([@SomeHats](https://github.com/SomeHats))
+- Update CHANGELOG.md \[skip ci\] ([@huppy-bot[bot]](https://github.com/huppy-bot[bot]))
+
+#### 💄 Product Improvements
+
+- npm: upgrade eslint v8 → v9 [#4757](https://github.com/tldraw/tldraw/pull/4757) ([@mimecuvalo](https://github.com/mimecuvalo) [@SomeHats](https://github.com/SomeHats) [@ds300](https://github.com/ds300) [@MitjaBezensek](https://github.com/MitjaBezensek) [@steveruizok](https://github.com/steveruizok))
+
+#### Authors: 6
+
+- [@huppy-bot[bot]](https://github.com/huppy-bot[bot])
+- alex ([@SomeHats](https://github.com/SomeHats))
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+- Mitja Bezenšek ([@MitjaBezensek](https://github.com/MitjaBezensek))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v3.3.0 (Wed Oct 09 2024)
+
+### Release Notes
+
+#### [state] fix error 'cannot change atoms during reaction cycle' bug ([#4645](https://github.com/tldraw/tldraw/pull/4645))
+
+- Fixed a bug that was manifesting as `Error('cannot change atoms during reaction cycle')`
+
+#### Add eslint rule to check that tsdoc params match with function params ([#4615](https://github.com/tldraw/tldraw/pull/4615))
+
+- Add lint rules to check for discrepancies between tsdoc params and function params and fix all the discovered issues.
+
+---
+
+#### 🐛 Bug Fixes
+
+- [state] fix error 'cannot change atoms during reaction cycle' bug [#4645](https://github.com/tldraw/tldraw/pull/4645) ([@ds300](https://github.com/ds300))
+
+#### 💄 Product Improvements
+
+- Add eslint rule to check that tsdoc params match with function params [#4615](https://github.com/tldraw/tldraw/pull/4615) ([@MitjaBezensek](https://github.com/MitjaBezensek))
+
+#### Authors: 2
+
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mitja Bezenšek ([@MitjaBezensek](https://github.com/MitjaBezensek))
+
+---
+
+# v3.1.0 (Wed Sep 25 2024)
+
+#### 🐛 Bug Fix
+
+- docs: cleanup/add readmes/licenses [#4542](https://github.com/tldraw/tldraw/pull/4542) ([@mimecuvalo](https://github.com/mimecuvalo) [@steveruizok](https://github.com/steveruizok) [@MitjaBezensek](https://github.com/MitjaBezensek) [@SomeHats](https://github.com/SomeHats))
+- Clean up `apps` directory [#4548](https://github.com/tldraw/tldraw/pull/4548) ([@SomeHats](https://github.com/SomeHats))
+- licenses: add MIT and update GB ones to match US [#4517](https://github.com/tldraw/tldraw/pull/4517) ([@mimecuvalo](https://github.com/mimecuvalo))
+
+#### Authors: 4
+
+- alex ([@SomeHats](https://github.com/SomeHats))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+- Mitja Bezenšek ([@MitjaBezensek](https://github.com/MitjaBezensek))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v3.0.0 (Fri Sep 13 2024)
+
+### Release Notes
+
+#### Detect multiple installed versions of tldraw packages ([#4398](https://github.com/tldraw/tldraw/pull/4398))
+
+- We detect when there are multiple versions of tldraw installed and let you know, as this can cause bugs in your application
+
+#### Move from function properties to methods ([#4288](https://github.com/tldraw/tldraw/pull/4288))
+
+- Adds eslint rules for enforcing the use of methods instead of function properties and fixes / disables all the resulting errors.
+
+---
+
+#### 🐛 Bug Fix
+
+- [SORRY, PLEASE MERGE] 3.0 megabus [#4494](https://github.com/tldraw/tldraw/pull/4494) ([@SomeHats](https://github.com/SomeHats) [@steveruizok](https://github.com/steveruizok) [@ds300](https://github.com/ds300))
+- consistent function style [#4468](https://github.com/tldraw/tldraw/pull/4468) ([@SomeHats](https://github.com/SomeHats))
+
+#### 💄 Product Improvements
+
+- inline nanoid [#4410](https://github.com/tldraw/tldraw/pull/4410) ([@SomeHats](https://github.com/SomeHats))
+
+#### 🛠️ API Changes
+
+- support tc39 decorators [#4412](https://github.com/tldraw/tldraw/pull/4412) ([@SomeHats](https://github.com/SomeHats))
+- Detect multiple installed versions of tldraw packages [#4398](https://github.com/tldraw/tldraw/pull/4398) ([@SomeHats](https://github.com/SomeHats))
+- Move from function properties to methods [#4288](https://github.com/tldraw/tldraw/pull/4288) ([@ds300](https://github.com/ds300) [@MitjaBezensek](https://github.com/MitjaBezensek) [@steveruizok](https://github.com/steveruizok))
+
+#### Authors: 4
+
+- alex ([@SomeHats](https://github.com/SomeHats))
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mitja Bezenšek ([@MitjaBezensek](https://github.com/MitjaBezensek))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v2.4.0 (Mon Jul 22 2024)
+
+### Release Notes
+
+#### Split @tldraw/state into @tldraw/state and @tldraw/state-react ([#4170](https://github.com/tldraw/tldraw/pull/4170))
+
+- Fixed a bug with…
+
+#### [sdk] make EffectScheduler and useStateTracking public ([#4155](https://github.com/tldraw/tldraw/pull/4155))
+
+- Made `EffectScheduler` and `useStateTracking` public
+
+---
+
+#### 💄 Product Improvements
+
+- [3/5] Automatically enable multiplayer UI when using demo sync [#4119](https://github.com/tldraw/tldraw/pull/4119) ([@SomeHats](https://github.com/SomeHats))
+
+#### 🛠️ API Changes
+
+- Split @tldraw/state into @tldraw/state and @tldraw/state-react [#4170](https://github.com/tldraw/tldraw/pull/4170) ([@ds300](https://github.com/ds300))
+- [sdk] make EffectScheduler and useStateTracking public [#4155](https://github.com/tldraw/tldraw/pull/4155) ([@ds300](https://github.com/ds300))
+
+#### Authors: 2
+
+- alex ([@SomeHats](https://github.com/SomeHats))
+- David Sheldrick ([@ds300](https://github.com/ds300))
+
+---
+
+# v2.3.0 (Tue Jun 25 2024)
+
+### Release Notes
+
+#### assets: make option to transform urls dynamically / LOD ([#3827](https://github.com/tldraw/tldraw/pull/3827))
+
+- Assets: make option to transform urls dynamically to provide different sized images on demand.
+
+---
+
+#### 📚 SDK Changes
+
+- image: follow-up fixes for LOD [#3934](https://github.com/tldraw/tldraw/pull/3934) ([@mimecuvalo](https://github.com/mimecuvalo))
+- assets: make option to transform urls dynamically / LOD [#3827](https://github.com/tldraw/tldraw/pull/3827) ([@mimecuvalo](https://github.com/mimecuvalo))
+
+#### Authors: 1
+
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+
+---
+
+# v2.2.0 (Tue Jun 11 2024)
+
+### Release Notes
+
+#### editor: register timeouts/intervals/rafs for disposal ([#3852](https://github.com/tldraw/tldraw/pull/3852))
+
+- Editor: add registry of timeouts/intervals/rafs
+
+#### [signia] perf thing again ([#3645](https://github.com/tldraw/tldraw/pull/3645))
+
+- Add a brief release note for your PR here.
+
+---
+
+#### 📚 SDK Changes
+
+- timeouts: rework effectschedule timeout tracking [#3870](https://github.com/tldraw/tldraw/pull/3870) ([@mimecuvalo](https://github.com/mimecuvalo))
+- editor: register timeouts/intervals/rafs for disposal [#3852](https://github.com/tldraw/tldraw/pull/3852) ([@mimecuvalo](https://github.com/mimecuvalo) [@steveruizok](https://github.com/steveruizok))
+- Force `interface` instead of `type` for better docs [#3815](https://github.com/tldraw/tldraw/pull/3815) ([@SomeHats](https://github.com/SomeHats))
+- [signia] perf thing again [#3645](https://github.com/tldraw/tldraw/pull/3645) ([@ds300](https://github.com/ds300))
+- Revert "[signia] Smart dirty checking of active computeds (#3516)" [#3612](https://github.com/tldraw/tldraw/pull/3612) ([@SomeHats](https://github.com/SomeHats))
+
+#### 📖 Documentation changes
+
+- make sure everything marked @public gets documented [#3892](https://github.com/tldraw/tldraw/pull/3892) ([@SomeHats](https://github.com/SomeHats))
+
+#### 🏠 Internal
+
+- Don't check api.json files into git [#3565](https://github.com/tldraw/tldraw/pull/3565) ([@SomeHats](https://github.com/SomeHats))
+
+#### Authors: 4
+
+- alex ([@SomeHats](https://github.com/SomeHats))
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v2.1.0 (Tue Apr 23 2024)
+
+### Release Notes
+
+#### [perf] faster signia capture (again) ([#3487](https://github.com/tldraw/tldraw/pull/3487))
+
+- Add a brief release note for your PR here.
+
+#### [perf] faster signia capture ([#3471](https://github.com/tldraw/tldraw/pull/3471))
+
+- Slight performance improvement to reactivity bookkeeping.
+
+#### New migrations again ([#3220](https://github.com/tldraw/tldraw/pull/3220))
+
+#### BREAKING CHANGES
+
+- The `Migrations` type is now called `LegacyMigrations`.
+- The serialized schema format (e.g. returned by `StoreSchema.serialize()` and `Store.getSnapshot()`) has changed. You don't need to do anything about it unless you were reading data directly from the schema for some reason. In which case it'd be best to avoid that in the future! We have no plans to change the schema format again (this time was traumatic enough) but you never know.
+- `compareRecordVersions` and the `RecordVersion` type have both disappeared. There is no replacement. These were public by mistake anyway, so hopefully nobody had been using it.
+- `compareSchemas` is gone. Comparing the schemas directly is no longer really possible since we introduced some fuzziness. The best thing to do now to check compatibility is to call `schema.getMigraitonsSince(prevSchema)` and it will return an error if the schemas are not compatible, an empty array if there are no migrations to apply since the prev schema, and a nonempty array otherwise.
+
+   Generally speaking, the best way to check schema compatibility now is to call `store.schema.getMigrationsSince(persistedSchema)`. This will throw an error if there is no upgrade path from the `persistedSchema` to the current version.
+
+- `defineMigrations` has been deprecated and will be removed in a future release. For upgrade instructions see https://tldraw.dev/docs/persistence#Updating-legacy-shape-migrations-defineMigrations
+
+- `migrate` has been removed. Nobody should have been using this but if you were you'll need to find an alternative. For migrating tldraw data, you should stick to using `schema.migrateStoreSnapshot` and, if you are building a nuanced sync engine that supports some amount of backwards compatibility, also feel free to use `schema.migratePersistedRecord`.
+- the `Migration` type has changed. If you need the old one for some reason it has been renamed to `LegacyMigration`. It will be removed in a future release.
+- the `Migrations` type has been renamed to `LegacyMigrations` and will be removed in a future release.
+- the `SerializedSchema` type has been augmented. If you need the old version specifically you can use `SerializedSchemaV1`
+
+#### [perf] Reinstate render throttling ([#3160](https://github.com/tldraw/tldraw/pull/3160))
+
+- Add a brief release note for your PR here.
+
+#### Performance improvements ([#2977](https://github.com/tldraw/tldraw/pull/2977))
+
+- Improves the performance of rendering.
+
+#### Fix typo in useValue comment ([#3088](https://github.com/tldraw/tldraw/pull/3088))
+
+- Fix typo in useValue comment.
+
+---
+
+#### 💥 Breaking Change
+
+- Performance improvements [#2977](https://github.com/tldraw/tldraw/pull/2977) ([@MitjaBezensek](https://github.com/MitjaBezensek) [@steveruizok](https://github.com/steveruizok))
+
+#### 📚 SDK Changes
+
+- [signia] Smart dirty checking of active computeds [#3516](https://github.com/tldraw/tldraw/pull/3516) ([@ds300](https://github.com/ds300))
+- [perf] faster signia capture (again) [#3487](https://github.com/tldraw/tldraw/pull/3487) ([@ds300](https://github.com/ds300))
+- [perf] faster signia capture [#3471](https://github.com/tldraw/tldraw/pull/3471) ([@ds300](https://github.com/ds300))
+- New migrations again [#3220](https://github.com/tldraw/tldraw/pull/3220) ([@ds300](https://github.com/ds300) [@steveruizok](https://github.com/steveruizok))
+- Add white migration [#3334](https://github.com/tldraw/tldraw/pull/3334) ([@steveruizok](https://github.com/steveruizok))
+- Fix blur bug in editable text [#3343](https://github.com/tldraw/tldraw/pull/3343) ([@steveruizok](https://github.com/steveruizok))
+- [perf] Reinstate render throttling [#3160](https://github.com/tldraw/tldraw/pull/3160) ([@ds300](https://github.com/ds300))
+
+#### 📖 Documentation changes
+
+- Fix typo in useValue comment [#3088](https://github.com/tldraw/tldraw/pull/3088) ([@Slowhand0309](https://github.com/Slowhand0309))
+
+#### 🏠 Internal
+
+- Revert "[perf] faster signia capture (#3471)" [#3480](https://github.com/tldraw/tldraw/pull/3480) ([@ds300](https://github.com/ds300))
+- Revert perf changes [#3217](https://github.com/tldraw/tldraw/pull/3217) ([@MitjaBezensek](https://github.com/MitjaBezensek))
+
+#### 🐛 Bug Fixes
+
+- Revert throttling of useValue and useStateTracking. [#3129](https://github.com/tldraw/tldraw/pull/3129) ([@MitjaBezensek](https://github.com/MitjaBezensek))
+
+#### Authors: 4
+
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mitja Bezenšek ([@MitjaBezensek](https://github.com/MitjaBezensek))
+- Slowhand ([@Slowhand0309](https://github.com/Slowhand0309))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v2.0.0-beta.5 (Thu Feb 29 2024)
+
+#### 🔩 Dependency Updates
+
+- bump typescript / api-extractor [#2949](https://github.com/tldraw/tldraw/pull/2949) ([@steveruizok](https://github.com/steveruizok))
+
+#### Authors: 1
+
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
+# v2.0.0-beta.4 (Wed Feb 21 2024)
+
+### Release Notes
+
+#### Improve signia error handling ([#2835](https://github.com/tldraw/tldraw/pull/2835))
+
+- Add a brief release note for your PR here.
+
+---
+
+#### 🐛 Bug Fix
+
+- Improve signia error handling [#2835](https://github.com/tldraw/tldraw/pull/2835) ([@ds300](https://github.com/ds300))
+
+#### 🏠 Internal
+
+- Check tsconfig "references" arrays [#2891](https://github.com/tldraw/tldraw/pull/2891) ([@ds300](https://github.com/ds300))
+- dev: swap yarn test and test-dev for better dx [#2773](https://github.com/tldraw/tldraw/pull/2773) ([@mimecuvalo](https://github.com/mimecuvalo))
+
+#### Authors: 2
+
+- David Sheldrick ([@ds300](https://github.com/ds300))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+
+---
+
+# v2.0.0-beta.3 (Tue Feb 13 2024)
+
+### Release Notes
+
+#### dev: add test-dev command for easier testing of packages ([#2627](https://github.com/tldraw/tldraw/pull/2627))
+
+- Adds easier testing command for individual packages.
+
+---
+
+#### 🚀 Enhancement
+
+- [dx] use Biome instead of Prettier, part 2 [#2731](https://github.com/tldraw/tldraw/pull/2731) ([@si14](https://github.com/si14))
+
+#### 🏠 Internal
+
+- Unbiome [#2776](https://github.com/tldraw/tldraw/pull/2776) ([@si14](https://github.com/si14))
+- Update the project to Node 20 [#2691](https://github.com/tldraw/tldraw/pull/2691) ([@si14](https://github.com/si14))
+- dev: add test-dev command for easier testing of packages [#2627](https://github.com/tldraw/tldraw/pull/2627) ([@mimecuvalo](https://github.com/mimecuvalo))
+- unbrivate, dot com in [#2475](https://github.com/tldraw/tldraw/pull/2475) ([@steveruizok](https://github.com/steveruizok) [@si14](https://github.com/si14) [@SomeHats](https://github.com/SomeHats))
+- Add docs [#2470](https://github.com/tldraw/tldraw/pull/2470) ([@steveruizok](https://github.com/steveruizok))
+
+#### 🔩 Dependency Updates
+
+- Bump Yarn to 4.0.2 and add version constraints [#2481](https://github.com/tldraw/tldraw/pull/2481) ([@si14](https://github.com/si14))
+
+#### Authors: 4
+
+- alex ([@SomeHats](https://github.com/SomeHats))
+- Dan Groshev ([@si14](https://github.com/si14))
+- Mime Čuvalo ([@mimecuvalo](https://github.com/mimecuvalo))
+- Steve Ruiz ([@steveruizok](https://github.com/steveruizok))
+
+---
+
 # v2.0.0-beta.1 (Wed Dec 20 2023)
 
 ### Release Notes

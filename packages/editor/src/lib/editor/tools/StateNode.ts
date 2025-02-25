@@ -1,32 +1,53 @@
 import { Atom, Computed, atom, computed } from '@tldraw/state'
+import { PerformanceTracker } from '@tldraw/utils'
+import { debugFlags } from '../../utils/debug-flags'
 import type { Editor } from '../Editor'
 import {
 	EVENT_NAME_MAP,
-	TLEnterEventHandler,
+	TLCancelEventInfo,
+	TLClickEventInfo,
+	TLCompleteEventInfo,
 	TLEventHandlers,
 	TLEventInfo,
-	TLExitEventHandler,
+	TLInterruptEventInfo,
+	TLKeyboardEventInfo,
 	TLPinchEventInfo,
-	TLTickEventHandler,
+	TLPointerEventInfo,
+	TLTickEventInfo,
+	TLWheelEventInfo,
 } from '../types/event-types'
 
-type TLStateNodeType = 'branch' | 'leaf' | 'root'
+const STATE_NODES_TO_MEASURE = [
+	'brushing',
+	'cropping',
+	'dragging',
+	'dragging_handle',
+	'drawing',
+	'erasing',
+	'lasering',
+	'resizing',
+	'rotating',
+	'scribble_brushing',
+	'translating',
+]
 
 /** @public */
 export interface TLStateNodeConstructor {
 	new (editor: Editor, parent?: StateNode): StateNode
 	id: string
 	initial?: string
-	children?: () => TLStateNodeConstructor[]
+	children?(): TLStateNodeConstructor[]
+	isLockable: boolean
 }
 
 /** @public */
 export abstract class StateNode implements Partial<TLEventHandlers> {
+	performanceTracker: PerformanceTracker
 	constructor(
 		public editor: Editor,
 		parent?: StateNode
 	) {
-		const { id, children, initial } = this.constructor as TLStateNodeConstructor
+		const { id, children, initial, isLockable } = this.constructor as TLStateNodeConstructor
 
 		this.id = id
 		this._isActive = atom<boolean>('toolIsActive' + this.id, false)
@@ -61,17 +82,21 @@ export abstract class StateNode implements Partial<TLEventHandlers> {
 				this._current.set(this.children[this.initial])
 			}
 		}
+		this.isLockable = isLockable
+		this.performanceTracker = new PerformanceTracker()
 	}
 
 	static id: string
 	static initial?: string
 	static children?: () => TLStateNodeConstructor[]
+	static isLockable = true
 
 	id: string
-	type: TLStateNodeType
+	type: 'branch' | 'leaf' | 'root'
 	shapeType?: string
 	initial?: string
 	children?: Record<string, StateNode>
+	isLockable: boolean
 	parent: StateNode
 
 	/**
@@ -118,7 +143,7 @@ export abstract class StateNode implements Partial<TLEventHandlers> {
 	 *
 	 * @public
 	 */
-	transition = (id: string, info: any = {}) => {
+	transition(id: string, info: any = {}) {
 		const path = id.split('.')
 
 		let currState = this as StateNode
@@ -145,20 +170,29 @@ export abstract class StateNode implements Partial<TLEventHandlers> {
 		return this
 	}
 
-	handleEvent = (info: Exclude<TLEventInfo, TLPinchEventInfo>) => {
+	handleEvent(info: Exclude<TLEventInfo, TLPinchEventInfo>) {
 		const cbName = EVENT_NAME_MAP[info.name]
-		const x = this.getCurrent()
+		const currentActiveChild = this._current.__unsafe__getWithoutCapture()
+
 		this[cbName]?.(info as any)
-		if (this.getCurrent() === x && this.getIsActive()) {
-			x?.handleEvent(info)
+		if (
+			this._isActive.__unsafe__getWithoutCapture() &&
+			currentActiveChild &&
+			currentActiveChild === this._current.__unsafe__getWithoutCapture()
+		) {
+			currentActiveChild.handleEvent(info)
 		}
 	}
 
 	// todo: move this logic into transition
-	enter = (info: any, from: string) => {
+	enter(info: any, from: string) {
+		if (debugFlags.measurePerformance.get() && STATE_NODES_TO_MEASURE.includes(this.id)) {
+			this.performanceTracker.start(this.id)
+		}
+
 		this._isActive.set(true)
 		this.onEnter?.(info, from)
-		if (this.onTick) this.editor.on('tick', this.onTick)
+
 		if (this.children && this.initial && this.getIsActive()) {
 			const initial = this.children[this.initial]
 			this._current.set(initial)
@@ -167,10 +201,13 @@ export abstract class StateNode implements Partial<TLEventHandlers> {
 	}
 
 	// todo: move this logic into transition
-	exit = (info: any, from: string) => {
+	exit(info: any, from: string) {
+		if (debugFlags.measurePerformance.get() && this.performanceTracker.isStarted()) {
+			this.performanceTracker.stop()
+		}
 		this._isActive.set(false)
-		if (this.onTick) this.editor.off('tick', this.onTick)
 		this.onExit?.(info, from)
+
 		if (!this.getIsActive()) {
 			this.getCurrent()?.exit(info, from)
 		}
@@ -196,23 +233,24 @@ export abstract class StateNode implements Partial<TLEventHandlers> {
 		this._currentToolIdMask.set(id)
 	}
 
-	onWheel?: TLEventHandlers['onWheel']
-	onPointerDown?: TLEventHandlers['onPointerDown']
-	onPointerMove?: TLEventHandlers['onPointerMove']
-	onPointerUp?: TLEventHandlers['onPointerUp']
-	onDoubleClick?: TLEventHandlers['onDoubleClick']
-	onTripleClick?: TLEventHandlers['onTripleClick']
-	onQuadrupleClick?: TLEventHandlers['onQuadrupleClick']
-	onRightClick?: TLEventHandlers['onRightClick']
-	onMiddleClick?: TLEventHandlers['onMiddleClick']
-	onKeyDown?: TLEventHandlers['onKeyDown']
-	onKeyUp?: TLEventHandlers['onKeyUp']
-	onKeyRepeat?: TLEventHandlers['onKeyRepeat']
-	onCancel?: TLEventHandlers['onCancel']
-	onComplete?: TLEventHandlers['onComplete']
-	onInterrupt?: TLEventHandlers['onInterrupt']
+	onWheel?(info: TLWheelEventInfo): void
+	onPointerDown?(info: TLPointerEventInfo): void
+	onPointerMove?(info: TLPointerEventInfo): void
+	onLongPress?(info: TLPointerEventInfo): void
+	onPointerUp?(info: TLPointerEventInfo): void
+	onDoubleClick?(info: TLClickEventInfo): void
+	onTripleClick?(info: TLClickEventInfo): void
+	onQuadrupleClick?(info: TLClickEventInfo): void
+	onRightClick?(info: TLPointerEventInfo): void
+	onMiddleClick?(info: TLPointerEventInfo): void
+	onKeyDown?(info: TLKeyboardEventInfo): void
+	onKeyUp?(info: TLKeyboardEventInfo): void
+	onKeyRepeat?(info: TLKeyboardEventInfo): void
+	onCancel?(info: TLCancelEventInfo): void
+	onComplete?(info: TLCompleteEventInfo): void
+	onInterrupt?(info: TLInterruptEventInfo): void
+	onTick?(info: TLTickEventInfo): void
 
-	onEnter?: TLEnterEventHandler
-	onExit?: TLExitEventHandler
-	onTick?: TLTickEventHandler
+	onEnter?(info: any, from: string): void
+	onExit?(info: any, to: string): void
 }

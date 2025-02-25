@@ -2,96 +2,98 @@ import {
 	DefaultColorThemePalette,
 	DefaultFontFamilies,
 	DefaultFontStyle,
-	HASH_PATTERN_ZOOM_NAMES,
-	MAX_ZOOM,
+	FileHelpers,
 	SvgExportDef,
 	TLDefaultColorTheme,
 	TLDefaultFillStyle,
 	TLDefaultFontStyle,
 	TLShapeUtilCanvasSvgDef,
 	debugFlags,
+	fetch,
+	last,
+	suffixSafeId,
+	tlenv,
 	useEditor,
+	useSharedSafeId,
+	useUniqueSafeId,
+	useValue,
 } from '@tldraw/editor'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDefaultColorTheme } from './useDefaultColorTheme'
 
 /** @public */
 export function getFontDefForExport(fontStyle: TLDefaultFontStyle): SvgExportDef {
 	return {
 		key: `${DefaultFontStyle.id}:${fontStyle}`,
-		getElement: async () => {
-			const font = findFont(fontStyle)
-			if (!font) return null
+		async getElement() {
+			const fontInfo = findFontInfo(fontStyle)
+			if (!fontInfo) return null
 
-			const url = (font as any).$$_url
-			const fontFaceRule = (font as any).$$_fontface
-			if (!url || !fontFaceRule) return null
+			const { url, fontFaceRule } = fontInfo
 
 			const fontFile = await (await fetch(url)).blob()
-			const base64FontFile = await new Promise<string>((resolve, reject) => {
-				const reader = new FileReader()
-				reader.onload = () => resolve(reader.result as string)
-				reader.onerror = reject
-				reader.readAsDataURL(fontFile)
-			})
+			const base64FontFile = await FileHelpers.blobToDataUrl(fontFile)
 
 			const newFontFaceRule = fontFaceRule.replace(url, base64FontFile)
-			const style = document.createElementNS('http://www.w3.org/2000/svg', 'style')
-			style.textContent = newFontFaceRule
-			return style
+			return <style>{newFontFaceRule}</style>
 		},
 	}
 }
 
-function findFont(name: TLDefaultFontStyle): FontFace | null {
+function findFontInfo(name: TLDefaultFontStyle) {
 	const fontFamily = DefaultFontFamilies[name]
 	for (const font of document.fonts) {
 		if (fontFamily.includes(font.family)) {
-			return font
+			if (
+				'$$_url' in font &&
+				typeof font.$$_url === 'string' &&
+				'$$_fontface' in font &&
+				typeof font.$$_fontface === 'string'
+			) {
+				return { url: font.$$_url, fontFaceRule: font.$$_fontface }
+			}
 		}
 	}
 	return null
 }
 
 /** @public */
-export function getFillDefForExport(
-	fill: TLDefaultFillStyle,
-	theme: TLDefaultColorTheme
-): SvgExportDef {
+export function getFillDefForExport(fill: TLDefaultFillStyle): SvgExportDef {
 	return {
 		key: `${DefaultFontStyle.id}:${fill}`,
-		getElement: async () => {
+		async getElement() {
 			if (fill !== 'pattern') return null
 
-			const t = 8 / 12
-			const divEl = document.createElement('div')
-			divEl.innerHTML = `
-				<svg>
-					<defs>
-						<mask id="hash_pattern_mask">
-							<rect x="0" y="0" width="8" height="8" fill="white" />
-							<g
-								strokeLinecap="round"
-								stroke="black"
-							>
-								<line x1="${t * 1}" y1="${t * 3}" x2="${t * 3}" y2="${t * 1}" />
-								<line x1="${t * 5}" y1="${t * 7}" x2="${t * 7}" y2="${t * 5}" />
-								<line x1="${t * 9}" y1="${t * 11}" x2="${t * 11}" y2="${t * 9}" />
-							</g>
-						</mask>
-						<pattern
-							id="hash_pattern"
-							width="8"
-							height="8"
-							patternUnits="userSpaceOnUse"
-						>
-							<rect x="0" y="0" width="8" height="8" fill="${theme.solid}" mask="url(#hash_pattern_mask)" />
-						</pattern>
-					</defs>
-				</svg>
-			`
-			return Array.from(divEl.querySelectorAll('defs > *'))
+			return <HashPatternForExport />
 		},
 	}
+}
+
+function HashPatternForExport() {
+	const getHashPatternZoomName = useGetHashPatternZoomName()
+	const maskId = useUniqueSafeId()
+	const theme = useDefaultColorTheme()
+	const t = 8 / 12
+	return (
+		<>
+			<mask id={maskId}>
+				<rect x="0" y="0" width="8" height="8" fill="white" />
+				<g strokeLinecap="round" stroke="black">
+					<line x1={t * 1} y1={t * 3} x2={t * 3} y2={t * 1} />
+					<line x1={t * 5} y1={t * 7} x2={t * 7} y2={t * 5} />
+					<line x1={t * 9} y1={t * 11} x2={t * 11} y2={t * 9} />
+				</g>
+			</mask>
+			<pattern
+				id={getHashPatternZoomName(1, theme.id)}
+				width="8"
+				height="8"
+				patternUnits="userSpaceOnUse"
+			>
+				<rect x="0" y="0" width="8" height="8" fill={theme.solid} mask={`url(#${maskId})`} />
+			</pattern>
+		</>
+	)
 }
 
 export function getFillDefForCanvas(): TLShapeUtilCanvasSvgDef {
@@ -113,7 +115,9 @@ const generateImage = (dpr: number, currentZoom: number, darkMode: boolean) => {
 		const ctx = canvasEl.getContext('2d')
 		if (!ctx) return
 
-		ctx.fillStyle = darkMode ? '#212529' : '#f8f9fa'
+		ctx.fillStyle = darkMode
+			? DefaultColorThemePalette.darkMode.solid
+			: DefaultColorThemePalette.lightMode.solid
 		ctx.fillRect(0, 0, size, size)
 
 		// This essentially generates an inverse of the pattern we're drawing.
@@ -155,81 +159,122 @@ const canvasBlob = (size: [number, number], fn: (ctx: CanvasRenderingContext2D) 
 	fn(ctx)
 	return canvas.toDataURL()
 }
-type PatternDef = { zoom: number; url: string; darkMode: boolean }
+interface PatternDef {
+	zoom: number
+	url: string
+	theme: 'light' | 'dark'
+}
 
-const getDefaultPatterns = () => {
-	const defaultPatterns: PatternDef[] = []
-	for (let i = 1; i <= Math.ceil(MAX_ZOOM); i++) {
-		const whitePixelBlob = canvasBlob([1, 1], (ctx) => {
-			ctx.fillStyle = DefaultColorThemePalette.lightMode.black.semi
-			ctx.fillRect(0, 0, 1, 1)
-		})
-		const blackPixelBlob = canvasBlob([1, 1], (ctx) => {
-			ctx.fillStyle = DefaultColorThemePalette.darkMode.black.semi
-			ctx.fillRect(0, 0, 1, 1)
-		})
-		defaultPatterns.push({
-			zoom: i,
-			url: whitePixelBlob,
-			darkMode: false,
-		})
-		defaultPatterns.push({
-			zoom: i,
-			url: blackPixelBlob,
-			darkMode: true,
-		})
+let defaultPixels: { white: string; black: string } | null = null
+function getDefaultPixels() {
+	if (!defaultPixels) {
+		defaultPixels = {
+			white: canvasBlob([1, 1], (ctx) => {
+				ctx.fillStyle = '#f8f9fa'
+				ctx.fillRect(0, 0, 1, 1)
+			}),
+			black: canvasBlob([1, 1], (ctx) => {
+				ctx.fillStyle = '#212529'
+				ctx.fillRect(0, 0, 1, 1)
+			}),
+		}
 	}
-	return defaultPatterns
+	return defaultPixels
+}
+
+function getPatternLodForZoomLevel(zoom: number) {
+	return Math.ceil(Math.log2(Math.max(1, zoom)))
+}
+
+export function useGetHashPatternZoomName() {
+	const id = useSharedSafeId('hash_pattern')
+	return useCallback(
+		(zoom: number, theme: TLDefaultColorTheme['id']) => {
+			const lod = getPatternLodForZoomLevel(zoom)
+			return suffixSafeId(id, `${theme}_${lod}`)
+		},
+		[id]
+	)
+}
+
+function getPatternLodsToGenerate(maxZoom: number) {
+	const levels = []
+	const minLod = 0
+	const maxLod = getPatternLodForZoomLevel(maxZoom)
+	for (let i = minLod; i <= maxLod; i++) {
+		levels.push(Math.pow(2, i))
+	}
+	return levels
+}
+
+function getDefaultPatterns(maxZoom: number): PatternDef[] {
+	const defaultPixels = getDefaultPixels()
+	return getPatternLodsToGenerate(maxZoom).flatMap((zoom) => [
+		{ zoom, url: defaultPixels.white, theme: 'light' },
+		{ zoom, url: defaultPixels.black, theme: 'dark' },
+	])
 }
 
 function usePattern() {
 	const editor = useEditor()
-	const dpr = editor.getInstanceState().devicePixelRatio
+	const dpr = useValue('devicePixelRatio', () => editor.getInstanceState().devicePixelRatio, [
+		editor,
+	])
+	const maxZoom = useValue('maxZoom', () => Math.ceil(last(editor.getCameraOptions().zoomSteps)!), [
+		editor,
+	])
 	const [isReady, setIsReady] = useState(false)
-	const defaultPatterns = useMemo(() => getDefaultPatterns(), [])
-	const [backgroundUrls, setBackgroundUrls] = useState<PatternDef[]>(defaultPatterns)
+	const [backgroundUrls, setBackgroundUrls] = useState<PatternDef[]>(() =>
+		getDefaultPatterns(maxZoom)
+	)
+	const getHashPatternZoomName = useGetHashPatternZoomName()
 
 	useEffect(() => {
-		const promises: Promise<{ zoom: number; url: string; darkMode: boolean }>[] = []
-
-		for (let i = 1; i <= Math.ceil(MAX_ZOOM); i++) {
-			promises.push(
-				generateImage(dpr, i, false).then((blob) => ({
-					zoom: i,
-					url: URL.createObjectURL(blob),
-					darkMode: false,
-				}))
-			)
-			promises.push(
-				generateImage(dpr, i, true).then((blob) => ({
-					zoom: i,
-					url: URL.createObjectURL(blob),
-					darkMode: true,
-				}))
-			)
+		if (process.env.NODE_ENV === 'test') {
+			setIsReady(true)
+			return
 		}
 
+		const promise = Promise.all(
+			getPatternLodsToGenerate(maxZoom).flatMap<Promise<PatternDef>>((zoom) => [
+				generateImage(dpr, zoom, false).then((blob) => ({
+					zoom,
+					theme: 'light',
+					url: URL.createObjectURL(blob),
+				})),
+				generateImage(dpr, zoom, true).then((blob) => ({
+					zoom,
+					theme: 'dark',
+					url: URL.createObjectURL(blob),
+				})),
+			])
+		)
+
 		let isCancelled = false
-		Promise.all(promises).then((urls) => {
+		promise.then((urls) => {
 			if (isCancelled) return
 			setBackgroundUrls(urls)
 			setIsReady(true)
 		})
-
 		return () => {
 			isCancelled = true
 			setIsReady(false)
+			promise.then((patterns) => {
+				for (const { url } of patterns) {
+					URL.revokeObjectURL(url)
+				}
+			})
 		}
-	}, [dpr])
+	}, [dpr, maxZoom])
 
 	const defs = (
 		<>
 			{backgroundUrls.map((item) => {
-				const key = item.zoom + (item.darkMode ? '_dark' : '_light')
+				const id = getHashPatternZoomName(item.zoom, item.theme)
 				return (
 					<pattern
-						key={key}
-						id={HASH_PATTERN_ZOOM_NAMES[key]}
+						key={id}
+						id={id}
 						width={TILE_PATTERN_SIZE}
 						height={TILE_PATTERN_SIZE}
 						patternUnits="userSpaceOnUse"
@@ -250,15 +295,15 @@ function PatternFillDefForCanvas() {
 	const { defs, isReady } = usePattern()
 
 	useEffect(() => {
-		if (isReady && editor.environment.isSafari) {
+		if (isReady && tlenv.isSafari) {
 			const htmlLayer = findHtmlLayerParent(containerRef.current!)
 			if (htmlLayer) {
 				// Wait for `patternContext` to be picked up
-				requestAnimationFrame(() => {
+				editor.timers.requestAnimationFrame(() => {
 					htmlLayer.style.display = 'none'
 
 					// Wait for 'display = "none"' to take effect
-					requestAnimationFrame(() => {
+					editor.timers.requestAnimationFrame(() => {
 						htmlLayer.style.display = ''
 					})
 				})

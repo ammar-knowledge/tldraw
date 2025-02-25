@@ -1,70 +1,94 @@
-import { defineMigrations } from '@tldraw/store'
 import { T } from '@tldraw/validate'
 import { assetIdValidator } from '../assets/TLBaseAsset'
 import { vecModelValidator } from '../misc/geometry-types'
-import { ShapePropsType, TLBaseShape } from './TLBaseShape'
+import { TLAssetId } from '../records/TLAsset'
+import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '../records/TLShape'
+import { RecordProps } from '../recordsWithProps'
+import { TLShapeCrop } from './ShapeWithCrop'
+import { TLBaseShape } from './TLBaseShape'
 
 /** @public */
-export const ImageShapeCrop = T.object({
+export const ImageShapeCrop: T.ObjectValidator<TLShapeCrop> = T.object({
 	topLeft: vecModelValidator,
 	bottomRight: vecModelValidator,
 })
-/** @public */
-export type TLImageShapeCrop = T.TypeOf<typeof ImageShapeCrop>
 
 /** @public */
-export const imageShapeProps = {
+export interface TLImageShapeProps {
+	w: number
+	h: number
+	playing: boolean
+	url: string
+	assetId: TLAssetId | null
+	crop: TLShapeCrop | null
+	flipX: boolean
+	flipY: boolean
+}
+
+/** @public */
+export type TLImageShape = TLBaseShape<'image', TLImageShapeProps>
+
+/** @public */
+export const imageShapeProps: RecordProps<TLImageShape> = {
 	w: T.nonZeroNumber,
 	h: T.nonZeroNumber,
 	playing: T.boolean,
 	url: T.linkUrl,
 	assetId: assetIdValidator.nullable(),
 	crop: ImageShapeCrop.nullable(),
+	flipX: T.boolean,
+	flipY: T.boolean,
 }
 
-/** @public */
-export type TLImageShapeProps = ShapePropsType<typeof imageShapeProps>
-
-/** @public */
-export type TLImageShape = TLBaseShape<'image', TLImageShapeProps>
-
-const Versions = {
+const Versions = createShapePropsMigrationIds('image', {
 	AddUrlProp: 1,
 	AddCropProp: 2,
 	MakeUrlsValid: 3,
-} as const
+	AddFlipProps: 4,
+})
 
-/** @internal */
-export const imageShapeMigrations = defineMigrations({
-	currentVersion: Versions.MakeUrlsValid,
-	migrators: {
-		[Versions.AddUrlProp]: {
-			up: (shape) => {
-				return { ...shape, props: { ...shape.props, url: '' } }
+export { Versions as imageShapeVersions }
+
+/** @public */
+export const imageShapeMigrations = createShapePropsMigrationSequence({
+	sequence: [
+		{
+			id: Versions.AddUrlProp,
+			up: (props) => {
+				props.url = ''
 			},
-			down: (shape) => {
-				const { url: _, ...props } = shape.props
-				return { ...shape, props }
+			down: 'retired',
+		},
+		{
+			id: Versions.AddCropProp,
+			up: (props) => {
+				props.crop = null
+			},
+			down: (props) => {
+				delete props.crop
 			},
 		},
-		[Versions.AddCropProp]: {
-			up: (shape) => {
-				return { ...shape, props: { ...shape.props, crop: null } }
-			},
-			down: (shape) => {
-				const { crop: _, ...props } = shape.props
-				return { ...shape, props }
-			},
-		},
-		[Versions.MakeUrlsValid]: {
-			up: (shape) => {
-				const url = shape.props.url
-				if (url !== '' && !T.linkUrl.isValid(shape.props.url)) {
-					return { ...shape, props: { ...shape.props, url: '' } }
+		{
+			id: Versions.MakeUrlsValid,
+			up: (props) => {
+				if (!T.linkUrl.isValid(props.url)) {
+					props.url = ''
 				}
-				return shape
 			},
-			down: (shape) => shape,
+			down: (_props) => {
+				// noop
+			},
 		},
-	},
+		{
+			id: Versions.AddFlipProps,
+			up: (props) => {
+				props.flipX = false
+				props.flipY = false
+			},
+			down: (props) => {
+				delete props.flipX
+				delete props.flipY
+			},
+		},
+	],
 })

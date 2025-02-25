@@ -1,46 +1,144 @@
 ---
-title: Introduction
+title: Quick Start
 status: published
 author: steveruizok
 date: 3/22/2023
 order: 0
 ---
 
-Welcome to the developer docs for tldraw, a React library for creating whiteboards and other infinite canvas experiences. These docs are for the 2.0 version which is currently in beta.
+Have five minutes? Let's try out the tldraw SDK in a React project. If you're new to React, we recommend using a [Vite template](https://vitejs.dev/guide/#scaffolding-your-first-vite-project) as a starter. We'll assume your project is already running locally.
 
-<a className="hero__images" href="https://examples.tldraw.com">
-	<img src={'/images/hero_light.png'} alt="tldraw demo" className="article__image hero__light" />
-	<img src={'/images/hero_dark.png'} alt="tldraw demo" className="article__image hero__dark" />
-</a>
+Prefer to jump straight to some code? Try this [sandbox](https://stackblitz.com/edit/vitejs-vite-ahoswhus?file=src%2FApp.tsx).
 
-- 🔗 Check out the [CodeSandbox](https://codesandbox.io/s/tldraw-example-canary-2lrzmy)
-- 🧑‍💻 Visit the [tldraw repo on Github](https://github.com/tldraw/tldraw)
-- 💬 Join the [Discord](https://discord.com/invite/SBBEVCA4PG)
+## Getting started
 
-## What can I do with tldraw?
+First, install the `tldraw` package from NPM:
 
-You can use the [Tldraw](?) React component to embed a fully featured and extendable whiteboard in your app. See the [CodeSandbox](https://codesandbox.io/s/tldraw-example-canary-2lrzmy) for a minimal example.
+```bash
+npm install tldraw
+```
 
-For multiplayer whiteboards, you can plug the component into the [collaboration backend](/docs/collaboration) of your choice. Check out our [Yjs example](https://github.com/tldraw/tldraw-yjs-example) to see how you might use tldraw together with [Yjs](https://yjs.dev/).
+Next, in your React project, import the `Tldraw` component and tldraw's CSS styles. Then render the `Tldraw` component inside a full screen container:
 
-You can use the [Editor](?) API to create, update, and delete shapes, control the camera—or do just about anything else. You can extend tldraw with your own [custom shapes](/docs/shapes) and [custom tools](/docs/tools). You can use our [user interface](/docs/user-interface) overrides to change the contents of menus and toolbars, or else hide the UI and replace it with your own.
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
 
-If you want to go even deeper, you can use the [TldrawEditor](?) component as a more minimal engine without the default tldraw shapes or user interface.
+export default function App() {
+	return (
+		<div style={{ position: 'fixed', inset: 0 }}>
+			<Tldraw />
+		</div>
+	)
+}
+```
 
-## How do I learn tldraw?
+That's pretty much it! At this point, you should have a complete working single-user canvas. You can draw and write on the canvas, add images and video, zoom and pan, copy and paste, undo and redo, and do just about everything else you'd expect to do on a canvas.
 
-In addition to the docs on this website, we provide [many examples](https://github.com/tldraw/tldraw/tree/main/apps/examples/src/examples) in the tldraw repo that demonstrate different ways of using the tldraw library. You can view them running [here](https://examples.tldraw.com/); or else you can clone the tldraw repo and start a local development server to see them in action.
+You'll be starting from our default [shapes](/docs/shapes), [tools](/docs/tools), and [user interface](/docs/user-interface), but you can customize all of these things for your project if you wish. For now, let's show off a few more features.
 
-You can ask questions and get help on our [Discord](https://discord.com/invite/SBBEVCA4PG) channel or in our Github [issues](https://github.com/tldraw/tldraw/issues).
+## Local persistence
 
-## Community
+Let's add local persistence by passing a `persistenceKey` prop to the `Tldraw` component:
 
-Found a bug or want to request a feature? Create an issue [here](https://github.com/tldraw/tldraw/issues). To connect with the team and other users, join us on our [Discord](https://discord.gg/JMbeb96jsh). To follow along with updates, you can also [subscribe to our Substack newsletter](https://tldraw.substack.com/) or follow us on [Twitter/X](https://twitter.com/tldraw).
+<FocusLines lines={[4]}>
 
-## License
+```tsx
+export default function App() {
+	return (
+		<div style={{ position: 'fixed', inset: 0 }}>
+			<Tldraw persistenceKey="example" />
+		</div>
+	)
+}
+```
 
-tldraw's source code and distributed packages are provided under the non-commercial [tldraw license](https://github.com/tldraw/tldraw/blob/master/LICENSE.md).
+</FocusLines>
 
-This license does not permit commercial use. If you wish to use tldraw in a commercial product or enterprise, you will need to purchase a commercial license. To obtain a commercial license, please contact us at [hello@tldraw.com](mailto:hello@tldraw.com).
+Using a `persistenceKey` will use your browser's storage to ensure that your project can survive a browser refresh. It will also synchronize the project between other instances that share the same `persistenceKey`—including in other browser tabs! Give it a try by opening your app in a second window.
 
-To learn more, see our [license](/community/license) page.
+## Real-time collaboration
+
+To add support for multiple users collaborating in realtime, you can use the [**tldraw sync**](/docs/sync) demo library. This library is a simple way to try out real-time collaboration in tldraw using temporary projects called rooms.
+
+First, install the `@tldraw/sync` package:
+
+```bash
+npm install @tldraw/sync
+```
+
+Next, import the `useSyncDemo` hook from the `@tldraw/sync` package. Call it in your component with a unique ID and pass the store that it returns to the `Tldraw` component:
+
+<FocusLines lines={[2,6,10]}>
+
+```tsx
+import { Tldraw } from 'tldraw'
+import { useSyncDemo } from '@tldraw/sync'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+	const store = useSyncDemo({ roomId: 'myapp-abc123' })
+
+	return (
+		<div style={{ position: 'fixed', inset: 0 }}>
+			<Tldraw store={store} />
+		</div>
+	)
+}
+```
+
+</FocusLines>
+
+Try it out by opening your project in a second incognito window, or else access it from another device. You should see all of tldraw's multiplayer features: live cursors, user names, viewport following, cursor chat, and more.
+
+If you want to go further with real-time collaboration, be sure to check out our guide to the [**tldraw sync**](/docs/sync) library.
+
+## Controlling the canvas
+
+One of the best parts of tldraw is its [editor](/docs/editor)'s runtime JavaScript API. Almost everything that can happen in tldraw can be done programmatically through the [Editor](?) instance.
+
+For simplicity's sake, let's roll back our persistence and sync code. We can then use the `Tldraw` component's `onMount` callback to get access to the [Editor](?) instance. We'll use the editor to create a new shape on the canvas, select it, then slowly zoom to it.
+
+```tsx
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
+
+export default function App() {
+	const handleMount = (editor) => {
+		editor.createShape({
+			type: 'text',
+			x: 200,
+			y: 200,
+			props: {
+				text: 'Hello world!',
+			},
+		})
+
+		editor.selectAll()
+
+		editor.zoomToSelection({
+			animation: { duration: 5000 },
+		})
+	}
+
+	return (
+		<div style={{ position: 'fixed', inset: 0 }}>
+			<Tldraw onMount={handleMount} />
+		</div>
+	)
+}
+```
+
+The [Editor](?) is tldraw's huge god object for controlling the canvas. Be sure to check out the [Editor](?) API documentation for more information on what you can do with it, as well as our guide on using the [editor](/docs/editor).
+
+## Next Steps
+
+Now that you've seen how the tldraw canvas works, you can:
+
+- Create your own [shapes](/docs/shapes) and [tools](/docs/tools)
+- Customize the [user interface](/docs/user-interface)
+- Learn more about the [editor](/docs/editor)
+
+You can do a lot with the tldraw SDK. In addition to our long-form docs, we have dozens of examples in our [examples section](/examples) that cover more of its functionality. You can run these locally with the tldraw [GitHub repository](https://github.com/tldraw/tldraw).
+
+Remember: if you build something incredible, please share it with us in our [#show-and-tell](https://discord.com/invite/SBBEVCA4PG) channel on Discord. Good luck!

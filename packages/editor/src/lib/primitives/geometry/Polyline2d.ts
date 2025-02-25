@@ -33,14 +33,8 @@ export class Polyline2d extends Geometry2d {
 		return this._segments
 	}
 
-	_length?: number
-
-	// eslint-disable-next-line no-restricted-syntax
-	get length() {
-		if (!this._length) {
-			this._length = this.segments.reduce((acc, segment) => acc + segment.length, 0)
-		}
-		return this._length
+	override getLength() {
+		return this.segments.reduce((acc, segment) => acc + segment.length, 0)
 	}
 
 	getVertices() {
@@ -51,22 +45,36 @@ export class Polyline2d extends Geometry2d {
 		const { segments } = this
 		let nearest = this.points[0]
 		let dist = Infinity
-
 		let p: Vec // current point on segment
 		let d: number // distance from A to p
 		for (let i = 0; i < segments.length; i++) {
 			p = segments[i].nearestPoint(A)
-			d = p.dist(A)
+			d = Vec.Dist2(p, A)
 			if (d < dist) {
 				nearest = p
 				dist = d
 			}
 		}
-
+		if (!nearest) throw Error('nearest point not found')
 		return nearest
 	}
 
-	hitTestLineSegment(A: Vec, B: Vec, zoom: number): boolean {
-		return this.segments.some((edge) => edge.hitTestLineSegment(A, B, zoom))
+	hitTestLineSegment(A: Vec, B: Vec, distance = 0): boolean {
+		const { segments } = this
+		for (let i = 0, n = segments.length; i < n; i++) {
+			if (segments[i].hitTestLineSegment(A, B, distance)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	getSvgPathData(): string {
+		const { vertices } = this
+		if (vertices.length < 2) return ''
+		return vertices.reduce((acc, vertex, i) => {
+			if (i === 0) return `M ${vertex.x} ${vertex.y}`
+			return `${acc} L ${vertex.x} ${vertex.y}`
+		}, '')
 	}
 }

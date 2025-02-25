@@ -1,21 +1,19 @@
 import {
 	DefaultSizeStyle,
-	Icon,
-	SharedStyleMap,
 	Tldraw,
+	TldrawUiIcon,
 	TLEditorComponents,
 	track,
 	useEditor,
-	Vec,
-} from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+} from 'tldraw'
+import 'tldraw/tldraw.css'
 
 const SIZES = [
 	{ value: 's', icon: 'size-small' },
 	{ value: 'm', icon: 'size-medium' },
 	{ value: 'l', icon: 'size-large' },
 	{ value: 'xl', icon: 'size-extra-large' },
-]
+] as const
 
 // There's a guide at the bottom of this file!
 
@@ -28,68 +26,57 @@ const ContextToolbarComponent = track(() => {
 	if (!selectionRotatedPageBounds) return null
 
 	// [2]
-	const styles = new SharedStyleMap(editor.getSharedStyles())
-	const size = styles.get(DefaultSizeStyle)
+	const size = editor.getSharedStyles().get(DefaultSizeStyle)
 	if (!size) return null
 	const currentSize = size.type === 'shared' ? size.value : undefined
 
-	const pageCoordinates = Vec.Sub(
-		editor.pageToScreen(selectionRotatedPageBounds.point),
-		editor.getViewportScreenBounds()
-	)
+	const pageCoordinates = editor.pageToViewport(selectionRotatedPageBounds.point)
 
 	return (
 		<div
 			style={{
 				position: 'absolute',
-				top: Math.max(16, pageCoordinates.y - 48),
-				left: Math.max(16, pageCoordinates.x),
 				pointerEvents: 'all',
+				top: pageCoordinates.y - 42,
+				left: pageCoordinates.x,
 				// [3]
-				width: selectionRotatedPageBounds.width,
+				width: selectionRotatedPageBounds.width * editor.getZoomLevel(),
+				display: 'flex',
+				justifyContent: 'center',
+				alignItems: 'center',
 			}}
 			// [4]
 			onPointerDown={(e) => e.stopPropagation()}
 		>
 			<div
 				style={{
+					borderRadius: 8,
 					display: 'flex',
-					justifyContent: 'center',
+					boxShadow: '0 0 0 1px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.1)',
+					background: 'var(--color-panel)',
+					width: 'fit-content',
 					alignItems: 'center',
 				}}
 			>
-				<div
-					style={{
-						borderRadius: 8,
-						display: 'flex',
-						boxShadow: '0 0 0 1px rgba(0,0,0,0.1), 0 4px 8px rgba(0,0,0,0.1)',
-						background: 'var(--color-panel)',
-						width: 'fit-content',
-						alignItems: 'center',
-					}}
-				>
-					{SIZES.map(({ value, icon }) => {
-						const isActive = value === currentSize
-						return (
-							<div
-								key={value}
-								style={{
-									display: 'flex',
-									alignItems: 'center',
-									justifyContent: 'center',
-									height: 32,
-									width: 32,
-									background: isActive ? 'var(--color-muted-2)' : 'transparent',
-								}}
-								onClick={() =>
-									editor.setStyleForSelectedShapes(DefaultSizeStyle, value, { squashing: false })
-								}
-							>
-								<Icon icon={icon} />
-							</div>
-						)
-					})}
-				</div>
+				{SIZES.map(({ value, icon }) => {
+					const isActive = value === currentSize
+					return (
+						<div
+							key={value}
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								justifyContent: 'center',
+								height: 32,
+								width: 32,
+								background: isActive ? 'var(--color-muted-2)' : 'transparent',
+							}}
+							onClick={() => editor.setStyleForSelectedShapes(DefaultSizeStyle, value)}
+						>
+							<TldrawUiIcon icon={icon} />
+						</div>
+					)
+				})}
 			</div>
 		</div>
 	)

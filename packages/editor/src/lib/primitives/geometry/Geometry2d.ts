@@ -2,11 +2,11 @@ import { Box } from '../Box'
 import { Vec } from '../Vec'
 import { pointInPolygon } from '../utils'
 
+/** @public */
 export interface Geometry2dOptions {
 	isFilled: boolean
 	isClosed: boolean
 	isLabel?: boolean
-	isSnappable?: boolean
 	debugColor?: string
 	ignore?: boolean
 }
@@ -16,14 +16,12 @@ export abstract class Geometry2d {
 	isFilled = false
 	isClosed = true
 	isLabel = false
-	isSnappable = true
 	debugColor?: string
 	ignore?: boolean
 
 	constructor(opts: Geometry2dOptions) {
 		this.isFilled = opts.isFilled
 		this.isClosed = opts.isClosed
-		this.isSnappable = opts.isSnappable ?? false
 		this.isLabel = opts.isLabel ?? false
 		this.debugColor = opts.debugColor
 		this.ignore = opts.ignore
@@ -33,24 +31,46 @@ export abstract class Geometry2d {
 
 	abstract nearestPoint(point: Vec): Vec
 
+	// hitTestPoint(point: Vec, margin = 0, hitInside = false) {
+	// 	// We've removed the broad phase here; that should be done outside of the call
+	// 	return this.distanceToPoint(point, hitInside) <= margin
+	// }
+
 	hitTestPoint(point: Vec, margin = 0, hitInside = false) {
-		// We've removed the broad phase here; that should be done outside of the call
-		return this.distanceToPoint(point, hitInside) <= margin
+		// First check whether the point is inside
+		if (this.isClosed && (this.isFilled || hitInside) && pointInPolygon(point, this.vertices)) {
+			return true
+		}
+		// Then check whether the distance is within the margin
+		return Vec.Dist2(point, this.nearestPoint(point)) <= margin * margin
 	}
 
 	distanceToPoint(point: Vec, hitInside = false) {
-		const dist = point.dist(this.nearestPoint(point))
-
-		if (this.isClosed && (this.isFilled || hitInside) && pointInPolygon(point, this.vertices)) {
-			return -dist
-		}
-		return dist
+		return (
+			point.dist(this.nearestPoint(point)) *
+			(this.isClosed && (this.isFilled || hitInside) && pointInPolygon(point, this.vertices)
+				? -1
+				: 1)
+		)
 	}
 
 	distanceToLineSegment(A: Vec, B: Vec) {
-		const point = this.nearestPointOnLineSegment(A, B)
-		const dist = Vec.DistanceToLineSegment(A, B, point) // repeated, bleh
-		return this.isClosed && this.isFilled && pointInPolygon(point, this.vertices) ? -dist : dist
+		if (A.equals(B)) return this.distanceToPoint(A)
+		const { vertices } = this
+		let nearest: Vec | undefined
+		let dist = Infinity
+		let d: number, p: Vec, q: Vec
+		for (let i = 0; i < vertices.length; i++) {
+			p = vertices[i]
+			q = Vec.NearestPointOnLineSegment(A, B, p, true)
+			d = Vec.Dist2(p, q)
+			if (d < dist) {
+				dist = d
+				nearest = q
+			}
+		}
+		if (!nearest) throw Error('nearest point not found')
+		return this.isClosed && this.isFilled && pointInPolygon(nearest, this.vertices) ? -dist : dist
 	}
 
 	hitTestLineSegment(A: Vec, B: Vec, distance = 0): boolean {
@@ -58,14 +78,17 @@ export abstract class Geometry2d {
 	}
 
 	nearestPointOnLineSegment(A: Vec, B: Vec): Vec {
-		let distance = Infinity
+		const { vertices } = this
 		let nearest: Vec | undefined
-		for (let i = 0; i < this.vertices.length; i++) {
-			const point = this.vertices[i]
-			const d = Vec.DistanceToLineSegment(A, B, point)
-			if (d < distance) {
-				distance = d
-				nearest = point
+		let dist = Infinity
+		let d: number, p: Vec, q: Vec
+		for (let i = 0; i < vertices.length; i++) {
+			p = vertices[i]
+			q = Vec.NearestPointOnLineSegment(A, B, p, true)
+			d = Vec.Dist2(p, q)
+			if (d < dist) {
+				dist = d
+				nearest = q
 			}
 		}
 		if (!nearest) throw Error('nearest point not found')
@@ -82,7 +105,7 @@ export abstract class Geometry2d {
 		)
 	}
 
-	_vertices: Vec[] | undefined
+	private _vertices: Vec[] | undefined
 
 	// eslint-disable-next-line no-restricted-syntax
 	get vertices(): Vec[] {
@@ -97,7 +120,7 @@ export abstract class Geometry2d {
 		return Box.FromPoints(this.vertices)
 	}
 
-	_bounds: Box | undefined
+	private _bounds: Box | undefined
 
 	// eslint-disable-next-line no-restricted-syntax
 	get bounds(): Box {
@@ -107,22 +130,12 @@ export abstract class Geometry2d {
 		return this._bounds
 	}
 
-	_snapPoints: Vec[] | undefined
-
-	// eslint-disable-next-line no-restricted-syntax
-	get snapPoints() {
-		if (!this._snapPoints) {
-			this._snapPoints = this.bounds.snapPoints
-		}
-		return this._snapPoints
-	}
-
 	// eslint-disable-next-line no-restricted-syntax
 	get center() {
 		return this.bounds.center
 	}
 
-	_area: number | undefined
+	private _area: number | undefined
 
 	// eslint-disable-next-line no-restricted-syntax
 	get area() {
@@ -166,4 +179,28 @@ export abstract class Geometry2d {
 
 		return path
 	}
+
+	private _length?: number
+
+	// eslint-disable-next-line no-restricted-syntax
+	get length() {
+		if (this._length) return this._length
+		this._length = this.getLength()
+		return this._length
+	}
+
+	getLength() {
+		const { vertices } = this
+		let n1: Vec,
+			p1 = vertices[0],
+			length = 0
+		for (let i = 1; i < vertices.length; i++) {
+			n1 = vertices[i]
+			length += Vec.Dist2(p1, n1)
+			p1 = n1
+		}
+		return Math.sqrt(length)
+	}
+
+	abstract getSvgPathData(first: boolean): string
 }

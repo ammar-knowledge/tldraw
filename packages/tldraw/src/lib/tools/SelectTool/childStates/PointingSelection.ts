@@ -1,10 +1,4 @@
-import {
-	StateNode,
-	TLClickEvent,
-	TLEventHandlers,
-	TLGroupShape,
-	TLPointerEventInfo,
-} from '@tldraw/editor'
+import { StateNode, TLClickEventInfo, TLGroupShape, TLPointerEventInfo } from '@tldraw/editor'
 import { selectOnCanvasPointerUp } from '../../selection-logic/selectOnCanvasPointerUp'
 
 export class PointingSelection extends StateNode {
@@ -14,23 +8,31 @@ export class PointingSelection extends StateNode {
 		target: 'selection'
 	}
 
-	override onEnter = (info: TLPointerEventInfo & { target: 'selection' }) => {
+	override onEnter(info: TLPointerEventInfo & { target: 'selection' }) {
 		this.info = info
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = (info) => {
-		selectOnCanvasPointerUp(this.editor)
+	override onPointerUp(info: TLPointerEventInfo) {
+		selectOnCanvasPointerUp(this.editor, info)
 		this.parent.transition('idle', info)
 	}
 
-	override onPointerMove: TLEventHandlers['onPointerMove'] = (info) => {
+	override onPointerMove(info: TLPointerEventInfo) {
 		if (this.editor.inputs.isDragging) {
-			if (this.editor.getInstanceState().isReadonly) return
-			this.parent.transition('translating', info)
+			this.startTranslating(info)
 		}
 	}
 
-	override onDoubleClick?: TLClickEvent | undefined = (info) => {
+	override onLongPress(info: TLPointerEventInfo) {
+		this.startTranslating(info)
+	}
+
+	private startTranslating(info: TLPointerEventInfo) {
+		if (this.editor.getIsReadonly()) return
+		this.parent.transition('translating', info)
+	}
+
+	override onDoubleClick?(info: TLClickEventInfo) {
 		const hoveredShape = this.editor.getHoveredShape()
 		const hitShape =
 			hoveredShape && !this.editor.isShapeOfType<TLGroupShape>(hoveredShape, 'group')
@@ -53,15 +55,15 @@ export class PointingSelection extends StateNode {
 		}
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.cancel()
 	}
 
-	override onInterrupt = () => {
+	override onInterrupt() {
 		this.cancel()
 	}
 

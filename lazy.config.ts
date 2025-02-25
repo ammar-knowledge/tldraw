@@ -6,8 +6,9 @@ const config = {
 			'<rootDir>/package.json',
 			'<rootDir>/yarn.lock',
 			'<rootDir>/lazy.config.ts',
-			'<rootDir>/config/**/*',
-			'<rootDir>/scripts/**/*',
+			'<rootDir>/internal/config/**/*',
+			'<rootDir>/internal/scripts/**/*',
+			'package.json',
 		],
 		exclude: [
 			'<allWorkspaceDirs>/coverage/**/*',
@@ -20,7 +21,7 @@ const config = {
 	scripts: {
 		build: {
 			baseCommand: 'exit 0',
-			runsAfter: { prebuild: {}, 'refresh-assets': {} },
+			runsAfter: { prebuild: {}, 'refresh-assets': {}, 'build-i18n': {} },
 			workspaceOverrides: {
 				'apps/vscode/*': { runsAfter: { 'refresh-assets': {} } },
 				'packages/*': {
@@ -30,6 +31,7 @@ const config = {
 					},
 				},
 				'apps/docs': {
+					runsAfter: { 'build-api': { in: 'all-packages' } },
 					cache: {
 						inputs: [
 							'app/**/*',
@@ -47,13 +49,19 @@ const config = {
 		},
 		dev: {
 			execution: 'independent',
-			runsAfter: { predev: {}, 'refresh-assets': {} },
+			runsAfter: { predev: {}, 'refresh-assets': {}, 'build-i18n': {} },
 			cache: 'none',
 			workspaceOverrides: {
 				'apps/vscode/*': { runsAfter: { build: { in: 'self-only' } } },
 			},
 		},
-		test: {
+		e2e: {
+			cache: 'none',
+		},
+		'e2e-x10': {
+			cache: 'none',
+		},
+		'test-ci': {
 			baseCommand: 'yarn run -T jest',
 			runsAfter: { 'refresh-assets': {} },
 			cache: {
@@ -80,14 +88,19 @@ const config = {
 		},
 		'refresh-assets': {
 			execution: 'top-level',
-			baseCommand: `tsx <rootDir>/scripts/refresh-assets.ts`,
+			baseCommand: `tsx <rootDir>/internal/scripts/refresh-assets.ts`,
 			cache: {
-				inputs: ['package.json', `<rootDir>/scripts/refresh-assets.ts`, `<rootDir>/assets/**/*`],
+				inputs: [
+					'package.json',
+					`<rootDir>/internal/scripts/refresh-assets.ts`,
+					`<rootDir>/assets/**/*`,
+					`<rootDir>/packages/*/package.json`,
+				],
 			},
 		},
 		'build-types': {
 			execution: 'top-level',
-			baseCommand: `tsx <rootDir>/scripts/typecheck.ts`,
+			baseCommand: `tsx <rootDir>/internal/scripts/typecheck.ts`,
 			cache: {
 				inputs: {
 					include: ['<allWorkspaceDirs>/**/*.{ts,tsx}', '<allWorkspaceDirs>/tsconfig.json'],
@@ -116,9 +129,16 @@ const config = {
 				},
 			},
 		},
+		'build-i18n': {
+			execution: 'independent',
+			cache: {
+				inputs: ['<rootDir>/apps/dotcom/client/public/tla/locales/*.json'],
+				outputs: ['<rootDir>/apps/dotcom/client/public/tla/locales-compiled/*.json'],
+			},
+		},
 		'api-check': {
 			execution: 'top-level',
-			baseCommand: `tsx <rootDir>/scripts/api-check.ts`,
+			baseCommand: `tsx <rootDir>/internal/scripts/api-check.ts`,
 			runsAfter: { 'build-api': {} },
 			cache: {
 				inputs: [`<rootDir>/packages/*/api/public.d.ts`],

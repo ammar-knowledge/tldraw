@@ -1,7 +1,4 @@
-/** @public */
-export type TLSvgDefsComponent = React.ComponentType
-
-/** @public */
+/** @public @react */
 export const DefaultSvgDefs = () => {
 	return null
 }

@@ -1,15 +1,26 @@
-import { linksUiOverrides } from './utils/links'
-// eslint-disable-next-line import/no-internal-modules
-import '@tldraw/tldraw/tldraw.css'
-// eslint-disable-next-line import/no-internal-modules
 import { getAssetUrlsByImport } from '@tldraw/assets/imports'
-import { Editor, ErrorBoundary, TLUiMenuSchema, Tldraw, setRuntimeOverrides } from '@tldraw/tldraw'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+	DefaultMainMenu,
+	DefaultSpinner,
+	EditSubmenu,
+	Editor,
+	ErrorBoundary,
+	ExportFileContentSubMenu,
+	ExtrasGroup,
+	PreferencesGroup,
+	TLComponents,
+	Tldraw,
+	ViewSubmenu,
+	setRuntimeOverrides,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
 import { VscodeMessage } from '../../messages'
 import '../public/index.css'
 import { ChangeResponder } from './ChangeResponder'
 import { FileOpen } from './FileOpen'
 import { FullPageMessage } from './FullPageMessage'
+import { Links } from './Links'
 import { onCreateAssetFromUrl } from './utils/bookmarks'
 import { vscode } from './utils/vscode'
 
@@ -53,25 +64,7 @@ export function WrappedTldrawEditor() {
 	)
 }
 
-const menuOverrides = {
-	menu: (_editor: Editor, schema: TLUiMenuSchema, _helpers: any) => {
-		schema.forEach((item) => {
-			if (item.id === 'menu' && item.type === 'group') {
-				item.children = item.children.filter((menuItem) => {
-					if (!menuItem) return false
-					if (menuItem.id === 'file' && menuItem.type === 'submenu') {
-						return false
-					}
-					return true
-				})
-			}
-		})
-
-		return schema
-	},
-}
-
-export const TldrawWrapper = () => {
+export function TldrawWrapper() {
 	const [tldrawInnerProps, setTldrawInnerProps] = useState<TLDrawInnerProps | null>(null)
 
 	useEffect(() => {
@@ -101,19 +94,33 @@ export const TldrawWrapper = () => {
 	}, [setTldrawInnerProps])
 
 	return tldrawInnerProps === null ? (
-		<FullPageMessage>Loading</FullPageMessage>
+		<FullPageMessage>
+			<DefaultSpinner />
+		</FullPageMessage>
 	) : (
 		<TldrawInner {...tldrawInnerProps} />
 	)
 }
 
-export type TLDrawInnerProps = {
+export interface TLDrawInnerProps {
 	assetSrc: string
 	fileContents: string
 	uri: string
 	isDarkMode: boolean
 }
 
+const components: TLComponents = {
+	MainMenu: () => (
+		<DefaultMainMenu>
+			<EditSubmenu />
+			<ViewSubmenu />
+			<ExportFileContentSubMenu />
+			<ExtrasGroup />
+			<PreferencesGroup />
+			<Links />
+		</DefaultMainMenu>
+	),
+}
 function TldrawInner({ uri, assetSrc, isDarkMode, fileContents }: TLDrawInnerProps) {
 	const assetUrls = useMemo(() => getAssetUrlsByImport({ baseUrl: assetSrc }), [assetSrc])
 
@@ -126,10 +133,10 @@ function TldrawInner({ uri, assetSrc, isDarkMode, fileContents }: TLDrawInnerPro
 			assetUrls={assetUrls}
 			persistenceKey={uri}
 			onMount={handleMount}
-			overrides={[menuOverrides, linksUiOverrides]}
-			autoFocus
+			components={components}
 		>
 			{/* <DarkModeHandler themeKind={themeKind} /> */}
+
 			<FileOpen fileContents={fileContents} forceDarkMode={isDarkMode} />
 			<ChangeResponder />
 		</Tldraw>

@@ -1,10 +1,17 @@
 import * as _Dialog from '@radix-ui/react-dialog'
-import { useContainer } from '@tldraw/editor'
-import React, { useCallback } from 'react'
-import { TLUiDialog, useDialogs } from '../hooks/useDialogsProvider'
+import { useContainer, useValue } from '@tldraw/editor'
+import { memo, useCallback, useRef } from 'react'
+import { TLUiDialog, useDialogs } from '../context/dialogs'
 
-const Dialog = ({ id, component: ModalContent, onClose }: TLUiDialog) => {
+/** @internal */
+const TldrawUiDialog = ({
+	id,
+	component: ModalContent,
+	onClose,
+	preventBackgroundClose,
+}: TLUiDialog) => {
 	const { removeDialog } = useDialogs()
+	const mouseDownInsideContentRef = useRef(false)
 
 	const container = useContainer()
 
@@ -31,12 +38,32 @@ const Dialog = ({ id, component: ModalContent, onClose }: TLUiDialog) => {
 					dir="ltr"
 					className="tlui-dialog__overlay"
 					onClick={(e) => {
+						// We pressed mouse down inside the content of the dialog then moved the mouse
+						// outside it and let go of the mouse button. This should not close the dialog.
+						if (mouseDownInsideContentRef.current) return
 						// only close if the click is on the overlay itself, ignore bubbling clicks
-						if (e.target === e.currentTarget) handleOpenChange(false)
+						if (!preventBackgroundClose && e.target === e.currentTarget) handleOpenChange(false)
 					}}
 				>
-					<_Dialog.Content dir="ltr" className="tlui-dialog__content">
-						<ModalContent onClose={() => handleOpenChange(false)} />
+					<_Dialog.Content
+						dir="ltr"
+						className="tlui-dialog__content"
+						aria-describedby={undefined}
+						onMouseDown={() => (mouseDownInsideContentRef.current = true)}
+						onMouseUp={() => (mouseDownInsideContentRef.current = false)}
+						onInteractOutside={(e) => {
+							mouseDownInsideContentRef.current = false
+							if (preventBackgroundClose) {
+								e.preventDefault()
+							}
+						}}
+					>
+						<ModalContent
+							onClose={() => {
+								mouseDownInsideContentRef.current = false
+								handleOpenChange(false)
+							}}
+						/>
 					</_Dialog.Content>
 				</_Dialog.Overlay>
 			</_Dialog.Portal>
@@ -44,16 +71,9 @@ const Dialog = ({ id, component: ModalContent, onClose }: TLUiDialog) => {
 	)
 }
 
-function _Dialogs() {
+/** @public @react */
+export const DefaultDialogs = memo(function DefaultDialogs() {
 	const { dialogs } = useDialogs()
-
-	return (
-		<>
-			{dialogs.map((dialog: TLUiDialog) => (
-				<Dialog key={dialog.id} {...dialog} />
-			))}
-		</>
-	)
-}
-
-export const Dialogs = React.memo(_Dialogs)
+	const dialogsArray = useValue('dialogs', () => dialogs.get(), [dialogs])
+	return dialogsArray.map((dialog) => <TldrawUiDialog key={dialog.id} {...dialog} />)
+})

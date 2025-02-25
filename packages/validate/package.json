@@ -1,7 +1,7 @@
 {
 	"name": "@tldraw/validate",
 	"description": "A runtime validation library by tldraw.",
-	"version": "2.0.0-beta.2",
+	"version": "3.8.0",
 	"author": {
 		"name": "tldraw Inc.",
 		"email": "hello@tldraw.com"
@@ -30,21 +30,21 @@
 	"/* GOTCHA */": "files will include ./dist and index.d.ts by default, add any others you want to include in here",
 	"files": [],
 	"scripts": {
-		"test": "lazy inherit",
-		"test-dev": "yarn run -T jest --watch",
+		"test-ci": "lazy inherit",
+		"test": "yarn run -T jest",
 		"test-coverage": "lazy inherit",
-		"build": "yarn run -T tsx ../../scripts/build-package.ts",
-		"build-api": "yarn run -T tsx ../../scripts/build-api.ts",
-		"prepack": "yarn run -T tsx ../../scripts/prepack.ts",
-		"postpack": "../../scripts/postpack.sh",
+		"build": "yarn run -T tsx ../../internal/scripts/build-package.ts",
+		"build-api": "yarn run -T tsx ../../internal/scripts/build-api.ts",
+		"prepack": "yarn run -T tsx ../../internal/scripts/prepack.ts",
+		"postpack": "../../internal/scripts/postpack.sh",
 		"pack-tarball": "yarn pack",
-		"lint": "yarn run -T tsx ../../scripts/lint.ts"
+		"lint": "yarn run -T tsx ../../internal/scripts/lint.ts"
 	},
 	"dependencies": {
 		"@tldraw/utils": "workspace:*"
 	},
 	"jest": {
-		"preset": "config/jest/node",
+		"preset": "../../internal/config/jest/node/jest-preset.js",
 		"setupFiles": [
 			"raf/polyfill"
 		],
@@ -53,6 +53,7 @@
 		}
 	},
 	"devDependencies": {
-		"lazyrepo": "0.0.0-alpha.27"
+		"lazyrepo": "0.0.0-alpha.27",
+		"lodash.isequal": "^4.5.0"
 	}
 }

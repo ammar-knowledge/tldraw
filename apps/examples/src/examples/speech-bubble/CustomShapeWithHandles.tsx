@@ -1,8 +1,8 @@
-import { Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
 import { SpeechBubbleTool } from './SpeechBubble/SpeechBubbleTool'
 import { SpeechBubbleUtil } from './SpeechBubble/SpeechBubbleUtil'
-import { customAssetUrls, uiOverrides } from './SpeechBubble/ui-overrides'
+import { components, customAssetUrls, uiOverrides } from './SpeechBubble/ui-overrides'
 import './customhandles.css'
 
 // There's a guide at the bottom of this file!
@@ -20,6 +20,7 @@ export default function CustomShapeWithHandles() {
 				tools={tools}
 				overrides={uiOverrides}
 				assetUrls={customAssetUrls}
+				components={components}
 				persistenceKey="whatever"
 			/>
 		</div>

@@ -1,7 +1,6 @@
-/* eslint-disable no-inner-declarations */
-import { InstancePresenceRecordType, Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
 import { useRef } from 'react'
+import { InstancePresenceRecordType, Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
 
 // There's a guide at the bottom of this file!
 
@@ -29,7 +28,9 @@ export default function UserPresenceExample() {
 						chatMessage: CURSOR_CHAT_MESSAGE,
 					})
 
-					editor.store.put([peerPresence])
+					editor.store.mergeRemoteChanges(() => {
+						editor.store.put([peerPresence])
+					})
 
 					// [b]
 					const raf = rRaf.current
@@ -38,6 +39,7 @@ export default function UserPresenceExample() {
 					if (MOVING_CURSOR_SPEED > 0 || CURSOR_CHAT_MESSAGE) {
 						function loop() {
 							let cursor = peerPresence.cursor
+							if (!cursor) return
 							let chatMessage = peerPresence.chatMessage
 
 							const now = Date.now()
@@ -47,7 +49,7 @@ export default function UserPresenceExample() {
 								const t = (now % k) / k
 
 								cursor = {
-									...peerPresence.cursor,
+									...cursor,
 									x: 150 + Math.cos(t * Math.PI * 2) * MOVING_CURSOR_RADIUS,
 									y: 150 + Math.sin(t * Math.PI * 2) * MOVING_CURSOR_RADIUS,
 								}
@@ -67,23 +69,29 @@ export default function UserPresenceExample() {
 												)
 							}
 
-							editor.store.put([
-								{
-									...peerPresence,
-									cursor,
-									chatMessage,
-									lastActivityTimestamp: now,
-								},
-							])
+							editor.store.mergeRemoteChanges(() => {
+								editor.store.put([
+									{
+										...peerPresence,
+										cursor,
+										chatMessage,
+										lastActivityTimestamp: now,
+									},
+								])
+							})
 
-							rRaf.current = requestAnimationFrame(loop)
+							rRaf.current = editor.timers.requestAnimationFrame(loop)
 						}
 
-						rRaf.current = requestAnimationFrame(loop)
+						rRaf.current = editor.timers.requestAnimationFrame(loop)
 					} else {
-						editor.store.put([{ ...peerPresence, lastActivityTimestamp: Date.now() }])
-						rRaf.current = setInterval(() => {
+						editor.store.mergeRemoteChanges(() => {
 							editor.store.put([{ ...peerPresence, lastActivityTimestamp: Date.now() }])
+						})
+						rRaf.current = editor.timers.setInterval(() => {
+							editor.store.mergeRemoteChanges(() => {
+								editor.store.put([{ ...peerPresence, lastActivityTimestamp: Date.now() }])
+							})
 						}, 1000)
 					}
 				}}

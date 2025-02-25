@@ -10,7 +10,7 @@ export class Edge2d extends Geometry2d {
 	u: Vec
 	ul: number
 
-	constructor(config: { start: Vec; end: Vec; isSnappable?: boolean }) {
+	constructor(config: { start: Vec; end: Vec }) {
 		super({ ...config, isClosed: false, isFilled: false })
 		const { start, end } = config
 
@@ -22,14 +22,8 @@ export class Edge2d extends Geometry2d {
 		this.ul = this.u.len() // the length of the unit vector
 	}
 
-	_length?: number
-
-	// eslint-disable-next-line no-restricted-syntax
-	get length() {
-		if (!this._length) {
-			return this.d.len()
-		}
-		return this._length
+	override getLength() {
+		return this.d.len()
 	}
 
 	midPoint(): Vec {
@@ -41,7 +35,8 @@ export class Edge2d extends Geometry2d {
 	}
 
 	override nearestPoint(point: Vec): Vec {
-		const { start, end, u, ul: l } = this
+		const { start, end, d, u, ul: l } = this
+		if (d.len() === 0) return start // start and end are the same
 		if (l === 0) return start // no length in the unit vector
 		const k = Vec.Sub(point, start).dpr(u) / l
 		const cx = start.x + u.x * k
@@ -53,7 +48,14 @@ export class Edge2d extends Geometry2d {
 		return new Vec(cx, cy)
 	}
 
-	override hitTestLineSegment(A: Vec, B: Vec, _zoom: number): boolean {
-		return linesIntersect(A, B, this.start, this.end)
+	override hitTestLineSegment(A: Vec, B: Vec, distance = 0): boolean {
+		return (
+			linesIntersect(A, B, this.start, this.end) || this.distanceToLineSegment(A, B) <= distance
+		)
+	}
+
+	getSvgPathData(first = true) {
+		const { start, end } = this
+		return `${first ? `M${start.toFixed()}` : ``} L${end.toFixed()}`
 	}
 }

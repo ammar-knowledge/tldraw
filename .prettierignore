@@ -8,7 +8,6 @@
 !**/pages/api/*
 **/.tsbuild*
 **/.next/*
-*.mdx
 **/_archive/*
 apps/docs/api-content.json
 apps/docs/content.json
@@ -17,9 +16,20 @@ apps/examples/www
 content.json
 apps/docs/utils/vector-db/index.json
 **/gen/**/*.md
+.github/pull_request_template.md
+
+**/api-report.md
+**/api-report.api.md
+**/CHANGELOG.md
+apps/docs/content/releases/**/*
+apps/docs/content/reference/**/*
 
 **/.vercel/*
 **/.wrangler/*
 **/.out/*
 **/.temp/*
-apps/dotcom/public/**/*.*
+apps/dotcom/client/public/**/*.*
+
+**/.clasp.json
+
+apps/dotcom/zero-cache/docker/docker-compose.yml

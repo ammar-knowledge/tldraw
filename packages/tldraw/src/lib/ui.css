@@ -1,11 +1,15 @@
 /* @tldraw/ui */
 
 .tl-container {
+	--layer-above: 1;
+	--layer-focused-input: 10;
+	--layer-menu-click-capture: 250;
 	--layer-panels: 300;
 	--layer-menus: 400;
-	--layer-overlays: 500;
 	--layer-toasts: 650;
 	--layer-cursor: 700;
+	--layer-header-footer: 999;
+	--layer-following-indicator: 1000;
 }
 
 /* -------------------------------------------------- */
@@ -29,6 +33,7 @@
 	pointer-events: all;
 	font-weight: inherit;
 	font-family: inherit;
+	line-height: inherit;
 	text-rendering: optimizeLegibility;
 	font-size: 12px;
 	gap: 0px;
@@ -38,6 +43,7 @@
 .tlui-button:disabled {
 	color: var(--color-text-3);
 	text-shadow: none;
+	cursor: default;
 }
 
 .tlui-button:disabled .tlui-kbd {
@@ -46,16 +52,19 @@
 
 .tlui-button > * {
 	position: relative;
-	z-index: 1;
+	z-index: var(--layer-above);
 }
 
 .tlui-button__label {
+	font-size: 12px;
 	flex-grow: 2;
 	text-align: left;
 }
 
 .tlui-button:focus-visible:not(:hover) {
-	outline: 1px solid var(--color-selected);
+	/* todo: fix the indicator errors in radix dropdown menus before restoring */
+	/* outline: 1px solid var(--color-selected); */
+	outline: none;
 	outline-offset: -4px;
 	border-radius: var(--radius-3);
 }
@@ -74,8 +83,13 @@
 	opacity: 1;
 }
 
+.tlui-button__icon + .tlui-button__label {
+	margin-left: var(--space-2);
+}
+
 @media (hover: hover) {
-	.tlui-button::after {
+	.tlui-button:not(.tlui-menu__submenu__trigger)::after,
+	.tlui-button.tlui-menu__submenu__trigger[data-highlighted]::after {
 		background-color: var(--color-muted-2);
 		opacity: 0;
 	}
@@ -83,6 +97,16 @@
 	.tlui-button:not(:disabled):hover::after {
 		opacity: 1;
 	}
+}
+
+.tlui-button[data-state='hinted']::after {
+	background-color: var(--color-hint);
+	opacity: 1;
+}
+
+.tlui-button[data-state='hinted']:not(:disabled, :focus-visible):active:after {
+	background: var(--color-hint);
+	opacity: 1;
 }
 
 /* Low button  */
@@ -126,52 +150,11 @@
 	position: relative;
 }
 
-/* Icon button */
-
-.tlui-button__icon {
-	height: 40px;
-	width: 40px;
-	min-height: 40px;
-	min-width: 40px;
-	padding: 0px;
-}
-
-.tlui-button__icon-left {
-	margin-right: var(--space-2);
-}
-
-/* Hinted */
-
-.tlui-button__icon[data-state='hinted']::after {
-	background: var(--color-hint);
-	opacity: 1;
-	/* box-shadow: inset 0 0 0 1px var(--color-muted-1); */
-}
-
-.tlui-button__icon[data-state='hinted']:not(:disabled, :focus-visible):active::after {
-	background: var(--color-hint);
-	opacity: 1;
-	/* box-shadow: inset 0 0 0 1px var(--color-text-3); */
-}
-
-@media (hover: hover) {
-	.tlui-button__icon::after {
-		inset: 4px;
-		border-radius: var(--radius-2);
-	}
-
-	.tlui-button__icon[data-state='hinted']:not(:disabled, :focus-visible):hover::after {
-		background: var(--color-hint);
-		/* box-shadow: inset 0 0 0 1px var(--color-text-3); */
-	}
-}
-
 /* Menu button */
 
 .tlui-button__menu {
 	height: 40px;
 	min-height: 40px;
-	min-width: 128px;
 	width: 100%;
 	gap: 8px;
 	margin: -4px 0px;
@@ -232,6 +215,10 @@
 	margin-right: -2px;
 }
 
+.tlui-button__tool:focus-visible:not(:hover) {
+	border-radius: 12px;
+}
+
 .tlui-button__tool:nth-of-type(1) {
 	margin-left: 0px;
 }
@@ -246,22 +233,32 @@
 		border-radius: 8px;
 	}
 
-	.tlui-button__tool[data-state='selected']:not(:disabled, :focus-visible):hover {
+	.tlui-button__tool[aria-checked='true']:not(:disabled, :focus-visible):hover {
 		color: var(--color-selected-contrast);
 	}
 }
 
-.tlui-button__tool[data-state='selected'] {
+.tlui-button__tool[aria-checked='true'] {
 	color: var(--color-selected-contrast);
 }
 
-.tlui-button__tool[data-state='selected']:not(:disabled, :focus-visible):active {
+.tlui-button__tool[aria-checked='true']:not(:disabled, :focus-visible):active {
 	color: var(--color-selected-contrast);
 }
 
-.tlui-button__tool[data-state='selected']:not(:disabled)::after {
+.tlui-button__tool[aria-checked='true']:not(:disabled)::after {
 	background: var(--color-selected);
 	opacity: 1;
+}
+
+.tlui-layout__mobile .tlui-button__tool {
+	height: 48px;
+	width: 43px;
+}
+
+.tlui-layout__mobile .tlui-button__tool > .tlui-icon {
+	height: 16px;
+	width: 16px;
 }
 
 /* Help */
@@ -333,26 +330,6 @@
 	text-align: center;
 }
 
-@media (max-width: 640px) {
-	.tlui-button__tool {
-		height: 48px;
-		width: 44px;
-	}
-
-	.tlui-button__tool > .tlui-icon {
-		height: 16px;
-		width: 16px;
-	}
-
-	.tlui-kbd {
-		visibility: hidden;
-	}
-
-	.tlui-menu__group .tlui-button__icon-left {
-		display: none;
-	}
-}
-
 /* --------------------- Layout --------------------- */
 
 .tlui-layout {
@@ -370,6 +347,12 @@
 	z-index: var(--layer-panels);
 	-webkit-transform: translate3d(0, 0, 0);
 	--sab: env(safe-area-inset-bottom);
+	font-weight: 500;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	font-smooth: antialiased;
+	text-rendering: optimizeLegibility;
 }
 
 .tlui-layout__top {
@@ -430,6 +413,13 @@
 	width: 18px;
 	height: 18px;
 	background-color: currentColor;
+}
+
+.tlui-icon__placeholder {
+	flex-shrink: 0;
+	width: 18px;
+	height: 18px;
+	background-color: transparent;
 }
 
 .tlui-icon__small {
@@ -514,7 +504,6 @@
 	grid-auto-flow: column;
 	grid-template-columns: auto;
 	grid-auto-columns: minmax(1em, auto);
-	gap: 1px;
 	align-self: bottom;
 	color: var(--color-text-1);
 	margin-left: var(--space-4);
@@ -554,7 +543,7 @@
 
 .tlui-popover__content {
 	position: relative;
-	max-height: 75vh;
+	max-height: calc(var(--radix-popover-content-available-height) - 8px);
 	margin: 0px;
 	border: none;
 	border-radius: var(--radius-3);
@@ -591,7 +580,9 @@
 }
 
 .tlui-debug-panel__current-state {
+	overflow: hidden;
 	white-space: nowrap;
+	text-overflow: ellipsis;
 }
 
 .tlui-debug-panel__fps {
@@ -629,11 +620,16 @@
 	height: fit-content;
 	max-height: 100%;
 	margin: 8px;
+	margin-top: 4px;
 	touch-action: auto;
 	overscroll-behavior: none;
 	overflow-y: auto;
 	overflow-x: hidden;
 	color: var(--color-text);
+}
+/* if the style panel is the only child (ie no share menu), increase the margin */
+.tlui-style-panel__wrapper:only-child {
+	margin-top: 8px;
 }
 
 .tlui-style-panel {
@@ -706,7 +702,7 @@
 	background: none;
 	margin: 0px;
 	position: relative;
-	z-index: 1;
+	z-index: var(--layer-above);
 	height: 40px;
 	max-height: 40px;
 	display: flex;
@@ -760,7 +756,7 @@
 	left: 0px;
 	width: 100%;
 	height: 100%;
-	z-index: var(--layer-overlays);
+	z-index: var(--layer-canvas-overlays);
 	background-color: var(--color-overlay);
 	pointer-events: all;
 	animation: fadeIn 0.12s ease-out;
@@ -780,8 +776,8 @@
 	font-size: 12px;
 	overflow: hidden;
 	min-width: 300px;
-	max-width: 80vw;
-	max-height: 80vh;
+	max-width: 80%;
+	max-height: 80%;
 }
 
 .tlui-dialog__header {
@@ -789,7 +785,7 @@
 	display: flex;
 	align-items: center;
 	flex: 0;
-	z-index: 999;
+	z-index: var(--layer-header-footer);
 	padding-left: var(--space-4);
 	color: var(--color-text);
 	height: 44px;
@@ -816,10 +812,21 @@
 	user-select: all;
 	-webkit-user-select: text;
 }
+.tlui-dialog__body a {
+	color: var(--color-selected);
+}
+
+.tlui-dialog__body ul,
+.tlui-dialog__body ol {
+	padding-left: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
 
 .tlui-dialog__footer {
 	position: relative;
-	z-index: 999;
+	z-index: var(--layer-header-footer);
 }
 
 .tlui-dialog__footer__actions {
@@ -861,18 +868,22 @@
 /* Row of controls + lock button */
 .tlui-toolbar__extras {
 	position: relative;
-	z-index: 1;
+	z-index: var(--layer-above);
 	width: 100%;
 	pointer-events: none;
 	top: 6px;
 	height: 48px;
 }
 
+.tlui-toolbar__extras:empty {
+	display: none;
+}
+
 .tlui-toolbar__extras__controls {
 	display: flex;
 	position: relative;
 	flex-direction: row;
-	z-index: 1;
+	z-index: var(--layer-above);
 	background-color: var(--color-low);
 	border-top-left-radius: var(--radius-4);
 	border-top-right-radius: var(--radius-4);
@@ -886,29 +897,32 @@
 .tlui-toolbar__tools {
 	display: flex;
 	flex-direction: row;
+	align-items: center;
 	background-color: var(--color-low);
 	border-radius: var(--radius-4);
 	z-index: var(--layer-panels);
 	pointer-events: all;
 	position: relative;
-	align-items: center;
 	background: var(--color-panel);
 	box-shadow: var(--shadow-2);
+}
+.tlui-toolbar__tools__list {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
 }
 
 .tlui-toolbar__overflow {
 	width: 40px;
 }
 
-@media (max-width: 640px) {
-	.tlui-toolbar__overflow {
-		width: 32px;
-		padding: 0px;
-	}
+.tlui-layout__mobile .tlui-toolbar__overflow {
+	width: 32px;
+	padding: 0px;
+}
 
-	.tlui-toolbar *[data-state='open']::after {
-		background: linear-gradient(0deg, rgba(144, 144, 144, 0) 0%, var(--color-muted-2) 100%);
-	}
+.tlui-layout__mobile .tlui-toolbar *[data-state='open']::after {
+	background: linear-gradient(0deg, rgba(144, 144, 144, 0) 0%, var(--color-muted-2) 100%);
 }
 
 /* -------------------- Help Zone ------------------- */
@@ -938,6 +952,10 @@
 
 /* ---------------------- Menu ---------------------- */
 
+.tlui-menu:empty {
+	display: none;
+}
+
 .tlui-menu {
 	z-index: var(--layer-menus);
 	height: fit-content;
@@ -964,34 +982,47 @@
 	stroke-width: 1px;
 }
 
-.tlui-menu__group[data-size='large'] {
-	min-width: initial;
+.tlui-menu__group {
+	width: 100%;
 }
 
-.tlui-menu__group[data-size='medium'] {
-	min-width: 144px;
+.tlui-menu__group:empty {
+	display: none;
 }
 
-.tlui-menu__group[data-size='small'] {
-	min-width: 96px;
+.tlui-menu__group {
+	border-bottom: 1px solid var(--color-divider);
 }
-
-.tlui-menu__group[data-size='tiny'] {
-	min-width: 0px;
-}
-
-.tlui-menu__group + .tlui-menu__group {
-	border-top: 1px solid var(--color-divider);
+.tlui-menu__group:nth-last-of-type(1) {
+	border-bottom: none;
 }
 
 .tlui-menu__submenu__trigger[data-state='open']:not(:hover)::after {
-	border-radius: var(--radius-1);
+	border-radius: 0px;
 	background: linear-gradient(90deg, rgba(144, 144, 144, 0) 0%, var(--color-muted-2) 100%);
 }
 
 .tlui-menu__submenu__trigger[data-direction='left'][data-state='open']:not(:hover)::after {
-	border-radius: var(--radius-1);
+	border-radius: 0px;
 	background: linear-gradient(270deg, rgba(144, 144, 144, 0) 0%, var(--color-muted-2) 100%);
+}
+
+/* Menu Sizes */
+
+.tlui-menu[data-size='large'] > .tlui-menu__group {
+	min-width: initial;
+}
+
+.tlui-menu[data-size='medium'] > .tlui-menu__group {
+	min-width: 144px;
+}
+
+.tlui-menu[data-size='small'] > .tlui-menu__group {
+	min-width: 96px;
+}
+
+.tlui-menu[data-size='tiny'] > .tlui-menu__group {
+	min-width: 0px;
 }
 
 /* ------------------ Actions Menu ------------------ */
@@ -1021,7 +1052,7 @@
 }
 
 .tlui-toast__icon {
-	padding-top: var(--space-4);
+	padding-top: 11px;
 	padding-left: var(--space-4);
 	color: var(--color-text-1);
 }
@@ -1036,6 +1067,22 @@
 	font-size: 12px;
 }
 
+.tlui-toast__container[data-severity='success'] .tlui-icon {
+	color: var(--color-success);
+}
+
+.tlui-toast__container[data-severity='info'] .tlui-icon {
+	color: var(--color-info);
+}
+
+.tlui-toast__container[data-severity='warning'] .tlui-icon {
+	color: var(--color-warning);
+}
+
+.tlui-toast__container[data-severity='error'] .tlui-icon {
+	color: var(--color-error);
+}
+
 .tlui-toast__main {
 	flex-grow: 2;
 	max-width: 280px;
@@ -1044,13 +1091,20 @@
 .tlui-toast__content {
 	padding: var(--space-4);
 	display: flex;
+	line-height: 1.4;
 	flex-direction: column;
 	gap: var(--space-3);
+}
+
+.tlui-toast__main[data-actions='true'] .tlui-toast__content {
+	padding-bottom: var(--space-2);
 }
 
 .tlui-toast__title {
 	font-weight: bold;
 	color: var(--color-text-1);
+	/* this makes the default toast look better */
+	line-height: 16px;
 }
 
 .tlui-toast__description {
@@ -1115,7 +1169,7 @@
 
 /* ------------------- Navigation ------------------- */
 
-.tlui-navigation-zone {
+.tlui-navigation-panel {
 	display: flex;
 	width: min-content;
 	flex-direction: column;
@@ -1126,7 +1180,7 @@
 	bottom: 0px;
 }
 
-.tlui-navigation-zone::before {
+.tlui-navigation-panel::before {
 	content: '';
 	display: block;
 	position: absolute;
@@ -1139,16 +1193,16 @@
 	background-color: var(--color-low);
 }
 
-.tlui-navigation-zone__toggle .tlui-icon {
+.tlui-navigation-panel__toggle .tlui-icon {
 	opacity: 0.24;
 }
 
-.tlui-navigation-zone__toggle:active .tlui-icon {
+.tlui-navigation-panel__toggle:active .tlui-icon {
 	opacity: 1;
 }
 
 @media (hover: hover) {
-	.tlui-navigation-zone__toggle:hover .tlui-icon {
+	.tlui-navigation-panel__toggle:hover .tlui-icon {
 		opacity: 1;
 	}
 }
@@ -1203,18 +1257,13 @@
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	width: 220px;
+	width: 260px;
 	height: fit-content;
 	max-height: 50vh;
 }
 
 .tlui-page-menu__trigger {
 	width: 128px;
-}
-
-.tlui-page-menu__trigger > span {
-	flex-grow: 2;
-	margin-right: var(--space-4);
 }
 
 .tlui-page-menu__header {
@@ -1256,11 +1305,39 @@
 }
 
 .tlui-page-menu__item {
+	position: relative;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
 	justify-content: space-between;
 	gap: 0px;
+}
+
+@media (hover: hover) {
+	.tlui-page-menu__item::after {
+		display: block;
+		content: '';
+		background-color: var(--color-muted-2);
+		position: absolute;
+		inset: 4px;
+		border-radius: 6px;
+		pointer-events: none;
+		opacity: 0;
+	}
+
+	.tlui-page-menu__item:hover::after {
+		opacity: 1;
+	}
+
+	.tlui-page-menu__item:hover > .tlui-page_menu__item__submenu > .tlui-button {
+		opacity: 1;
+	}
+}
+
+/* Since we're adding an after hover effect to the page menu item, we want to hide the hovers on the individual buttons in the page menu item */
+.tlui-page-menu__item__button::after,
+.tlui-page_menu__item__submenu > .tlui-button::after {
+	display: none;
 }
 
 .tlui-page-menu__item:nth-of-type(n + 2) {
@@ -1310,7 +1387,7 @@
 	flex-direction: row;
 	align-items: center;
 	overflow: hidden;
-	z-index: 1;
+	z-index: var(--layer-above);
 }
 
 .tlui-page_menu__item__sortable__title {
@@ -1322,7 +1399,7 @@
 }
 
 .tlui-page_menu__item__sortable:focus-within {
-	z-index: 10;
+	z-index: var(--layer-focused-input);
 }
 
 .tlui-page_menu__item__sortable__handle {
@@ -1360,17 +1437,39 @@
 
 .tlui-page_menu__item__submenu[data-isediting='true'] {
 	display: block;
+	opacity: 1;
+}
+
+.tlui-page_menu__item__submenu > .tlui-button {
+	opacity: 0;
+}
+
+@media (any-pointer: coarse) {
+	.tlui-page_menu__item__submenu > .tlui-button {
+		opacity: 1;
+	}
+}
+
+.tlui-button__icon {
+	padding: 0px;
+}
+
+.tlui-page-menu__item__button .tlui-button__icon {
+	margin-right: 4px;
 }
 
 @media (hover: hover) {
 	.tlui-page_menu__item__submenu {
-		opacity: 0;
 		display: block;
 	}
 
-	.tlui-page_menu__item__submenu:hover,
-	.tlui-page-menu__item:focus-within > .tlui-page_menu__item__submenu,
-	.tlui-page_menu__item__sortable:focus-within > .tlui-page_menu__item__submenu {
+	.tlui-page_menu__item__submenu[data-isediting='true'] > .tlui-button {
+		opacity: 0;
+	}
+
+	.tlui-page_menu__item__submenu > .tlui-button[data-state='open'],
+	.tlui-page_menu__item__submenu:hover > .tlui-button,
+	.tlui-page_menu__item__sortable:focus-within > .tlui-page_menu__item__submenu > .tlui-button {
 		opacity: 1;
 	}
 }
@@ -1488,24 +1587,21 @@
 
 .tlui-shortcuts-dialog__body {
 	position: relative;
-	columns: 1;
+	columns: 3;
 	column-gap: var(--space-9);
 	pointer-events: all;
 	touch-action: auto;
+
+	/* Terrible fix to allow firefox users to scroll the dialog */
+	overflow-x: auto;
 }
 
-@media (min-width: 475px) {
-	.tlui-shortcuts-dialog__body {
-		columns: 2;
-		column-gap: var(--space-9);
-	}
+.tlui-shortcuts-dialog__body__tablet {
+	columns: 2;
 }
 
-@media (min-width: 960px) {
-	.tlui-shortcuts-dialog__body {
-		columns: 3;
-		column-gap: var(--space-9);
-	}
+.tlui-shortcuts-dialog__body__mobile {
+	columns: 1;
 }
 
 .tlui-shortcuts-dialog__group {
@@ -1540,4 +1636,205 @@
 .tlui-shortcuts-dialog__key-pair__key {
 	flex: 1;
 	font-size: 12px;
+}
+
+/* ------------------- Da share zone ------------------ */
+.tlui-share-zone {
+	padding: 0px 0px 0px 0px;
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-end;
+	z-index: var(--layer-panels);
+	align-items: center;
+	padding-top: 2px;
+	padding-right: 4px;
+}
+
+/* ------------------- People Menu ------------------- */
+.tlui-people-menu__avatars-button {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	background: none;
+	border: none;
+	cursor: pointer;
+	pointer-events: all;
+	border-radius: var(--radius-1);
+	padding-right: 1px;
+	height: 100%;
+}
+
+.tlui-people-menu__avatars {
+	display: flex;
+	flex-direction: row;
+}
+
+.tlui-people-menu__avatar {
+	height: 24px;
+	width: 24px;
+	border: 2px solid var(--color-background);
+	background-color: var(--color-low);
+	border-radius: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	font-size: 10px;
+	font-weight: bold;
+	color: var(--color-selected-contrast);
+	z-index: 2;
+}
+
+.tlui-people-menu__avatar:nth-of-type(n + 2) {
+	margin-left: -12px;
+}
+
+.tlui-people-menu__avatars-button[data-state='open'] {
+	opacity: 1;
+}
+
+@media (hover: hover) {
+	.tlui-people-menu__avatars-button:hover .tlui-people-menu__avatar {
+		border-color: var(--color-low);
+	}
+}
+
+.tlui-people-menu__more {
+	min-width: 0px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-text-1);
+	font-family: inherit;
+	padding: 0px 4px;
+	letter-spacing: 1.5;
+}
+.tlui-people-menu__more::after {
+	border-radius: var(--radius-2);
+	inset: 0px;
+}
+
+.tlui-people-menu__wrapper {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 220px;
+	height: fit-content;
+	max-height: 50vh;
+}
+
+.tlui-people-menu__section {
+	position: relative;
+	touch-action: auto;
+	flex-direction: column;
+	max-height: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
+	touch-action: auto;
+}
+
+.tlui-people-menu__section:first-child,
+.tlui-people-menu__section:last-child {
+	flex-shrink: 0;
+}
+
+.tlui-people-menu__section:not(:last-child) {
+	border-bottom: 1px solid var(--color-divider);
+}
+
+.tlui-people-menu__user {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.tlui-people-menu__user__color {
+	flex-shrink: 0;
+}
+
+.tlui-people-menu__user__name {
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	color: var(--color-text-1);
+	max-width: 100%;
+	flex-grow: 1;
+	flex-shrink: 100;
+}
+
+.tlui-people-menu__user__label {
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	color: var(--color-text-3);
+	flex-grow: 100;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+
+.tlui-people-menu__user__input {
+	flex-grow: 2;
+	height: 100%;
+	padding: 0px;
+	margin: 0px;
+}
+
+.tlui-people-menu__user > .tlui-input__wrapper {
+	width: auto;
+	display: flex;
+	align-items: auto;
+	flex-grow: 2;
+	gap: 8px;
+	height: 100%;
+	padding: 0px;
+}
+
+.tlui-people-menu__item {
+	display: flex;
+	justify-content: flex-start;
+	width: 100%;
+}
+
+.tlui-people-menu__item__button {
+	padding: 0 11px;
+}
+
+.tlui-people-menu__item > .tlui-button__menu {
+	width: auto;
+	display: flex;
+	align-items: auto;
+	justify-content: flex-start;
+	flex-grow: 2;
+	gap: 11px;
+}
+
+.tlui-people-menu__item__follow {
+	min-width: 44px;
+}
+
+.tlui-people-menu__item__follow[data-active='true'] .tlui-icon {
+	opacity: 1;
+}
+
+.tlui-people-menu__item__follow:focus-visible .tlui-icon {
+	opacity: 1;
+}
+
+@media (hover: hover) {
+	.tlui-people-menu__item__follow .tlui-icon {
+		opacity: 0;
+	}
+
+	.tlui-people-menu__item__follow:hover .tlui-icon {
+		opacity: 1;
+	}
+}
+
+.tlui-menu-click-capture {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-menu-click-capture);
 }

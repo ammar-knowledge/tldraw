@@ -1,6 +1,6 @@
 import { ComponentType } from 'react'
 
-export type Example = {
+export interface Example {
 	title: string
 	description: string
 	details: string
@@ -10,10 +10,19 @@ export type Example = {
 	category: Category
 	priority: number
 	componentFile: string
-	loadComponent: () => Promise<ComponentType>
+	keywords: string[]
+	multiplayer: boolean
+	loadComponent(): Promise<ComponentType<{ roomId?: string }>>
 }
 
-type Category = 'basic' | 'editor-api' | 'ui' | 'collaboration' | 'data/assets' | 'shapes/tools'
+type Category =
+	| 'basic'
+	| 'editor-api'
+	| 'ui'
+	| 'collaboration'
+	| 'data/assets'
+	| 'shapes/tools'
+	| 'use-cases'
 
 const getExamplesForCategory = (category: Category) =>
 	(Object.values(import.meta.glob('./examples/*/README.md', { eager: true })) as Example[])
@@ -24,12 +33,13 @@ const getExamplesForCategory = (category: Category) =>
 		})
 
 const categories: Record<Category, string> = {
-	basic: 'Getting Started',
-	ui: 'UI/Theming',
-	'shapes/tools': 'Shapes & Tools',
-	'data/assets': 'Data & Assets',
+	basic: 'Getting started',
+	collaboration: 'Sync',
+	ui: 'UI & theming',
+	'shapes/tools': 'Shapes & tools',
+	'data/assets': 'Data & assets',
 	'editor-api': 'Editor API',
-	collaboration: 'Collaboration',
+	'use-cases': 'Use cases',
 }
 
 export const examples = Object.entries(categories).map(([category, title]) => ({

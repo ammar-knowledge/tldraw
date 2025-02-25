@@ -36,7 +36,7 @@ it('Deleting the parent also deletes descendants', () => {
 	expect(editor.getShape(ids.box2)).not.toBeUndefined()
 	expect(editor.getShape(ids.ellipse1)).not.toBeUndefined()
 
-	editor.mark('')
+	editor.markHistoryStoppingPoint('')
 	editor.deleteShapes([ids.box2])
 
 	expect(editor.getSelectedShapeIds()).toMatchObject([])
@@ -54,4 +54,30 @@ it('Deleting the parent also deletes descendants', () => {
 	expect(editor.getSelectedShapeIds()).toMatchObject([])
 	expect(editor.getShape(ids.box2)).toBeUndefined()
 	expect(editor.getShape(ids.ellipse1)).toBeUndefined()
+})
+
+it('preserves the redo stack', () => {
+	editor.markHistoryStoppingPoint()
+	editor.select(ids.box1)
+	editor.translateSelection(10, 10)
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 110, y: 110 })
+
+	editor.markHistoryStoppingPoint()
+	editor.translateSelection(10, 10)
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 120, y: 120 })
+
+	editor.undo()
+	editor.undo()
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 100, y: 100 })
+
+	editor.deselect()
+	editor.redo()
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 110, y: 110 })
+
+	editor.select(ids.box2)
+	editor.redo()
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 120, y: 120 })
+
+	editor.undo()
+	expect(editor.getShape(ids.box1)).toMatchObject({ x: 110, y: 110 })
 })

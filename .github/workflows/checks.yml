@@ -38,11 +38,19 @@ jobs:
       - name: Check for installation warnings
         run: 'yarn | grep -vzq "with warnings"'
 
+      - name: Check packages
+        run: yarn check-packages
+
       - name: Typecheck
         run: yarn build-types
 
-      - name: Check scripts
-        run: yarn check-scripts
+      - name: Check bundle sizes
+        run: yarn lazy check-bundle-size
+
+      - name: Check PR template
+        run: yarn update-pr-template --check
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Lint
         run: yarn lint
@@ -50,8 +58,13 @@ jobs:
       - name: Check API declarations and docs work as intended
         run: yarn api-check
 
+      - name: Check dotcom localizations
+        run: |
+          yarn build-i18n 
+          git diff --exit-code --quiet ./apps/dotcom/client/public/tla/locales/ ./apps/dotcom/client/public/tla/locales-compiled/ || (echo "Please run yarn build-i18n and commit the changes" && exit 1)
+
       - name: Test
-        run: yarn test
+        run: yarn test-ci
 
   build:
     name: 'Build all projects'

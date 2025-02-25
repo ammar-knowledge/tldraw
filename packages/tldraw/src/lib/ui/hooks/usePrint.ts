@@ -1,4 +1,4 @@
-import { uniqueId, useEditor } from '@tldraw/editor'
+import { tlenv, uniqueId, useEditor } from '@tldraw/editor'
 import { useCallback, useRef } from 'react'
 
 /** @internal */
@@ -12,6 +12,7 @@ export function usePrint() {
 			const el = document.createElement('div')
 			const style = document.createElement('style')
 
+			// todo: why are these using a ref? this seems like it could be a function rather than a hook
 			const clearElements = (printEl: HTMLDivElement | null, styleEl: HTMLStyleElement | null) => {
 				if (printEl) printEl.innerHTML = ''
 				if (styleEl && document.head.contains(styleEl)) document.head.removeChild(styleEl)
@@ -133,7 +134,7 @@ export function usePrint() {
 			}
 
 			const afterPrintHandler = () => {
-				editor.once('change-history', () => {
+				editor.once('tick', () => {
 					clearElements(el, style)
 				})
 			}
@@ -141,14 +142,14 @@ export function usePrint() {
 			window.addEventListener('beforeprint', beforePrintHandler)
 			window.addEventListener('afterprint', afterPrintHandler)
 
-			function addPageToPrint(title: string, footer: string | null, svg: SVGElement) {
+			function addPageToPrint(title: string, footer: string | null, svg: string) {
 				try {
 					el.innerHTML += `<div class="${className}__item">
         <div class="${className}__item__header">
           ${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
         </div>
         <div class="${className}__item__main">
-          ${svg.outerHTML}
+          ${svg}
         </div>
         <div class="${className}__item__footer ${className}__item__footer__${footer ? '' : 'hide'}">
           ${footer ?? ''}
@@ -160,12 +161,12 @@ export function usePrint() {
 			}
 
 			function triggerPrint() {
-				if (editor.environment.isChromeForIos) {
+				if (tlenv.isChromeForIos) {
 					beforePrintHandler()
 					window.print()
-				} else if (editor.environment.isSafari) {
+				} else if (tlenv.isSafari) {
 					beforePrintHandler()
-					// eslint-disable-next-line deprecation/deprecation
+					// eslint-disable-next-line @typescript-eslint/no-deprecated
 					document.execCommand('print', false)
 				} else {
 					window.print()
@@ -187,11 +188,11 @@ export function usePrint() {
 
 			if (editor.getSelectedShapeIds().length > 0) {
 				// Print the selected ids from the current page
-				const svg = await editor.getSvg(selectedShapeIds, svgOpts)
+				const svgExport = await editor.getSvgString(selectedShapeIds, svgOpts)
 
-				if (svg) {
+				if (svgExport) {
 					const page = pages.find((p) => p.id === currentPageId)
-					addPageToPrint(`tldraw — ${page?.name}`, null, svg)
+					addPageToPrint(`tldraw — ${page?.name}`, null, svgExport.svg)
 					triggerPrint()
 				}
 			} else {
@@ -199,17 +200,23 @@ export function usePrint() {
 					// Print all pages
 					for (let i = 0; i < pages.length; i++) {
 						const page = pages[i]
-						const svg = await editor.getSvg(editor.getSortedChildIdsForParent(page.id), svgOpts)
-						if (svg) {
-							addPageToPrint(`tldraw — ${page.name}`, `${i}/${pages.length}`, svg)
+						const svgExport = await editor.getSvgString(
+							editor.getSortedChildIdsForParent(page.id),
+							svgOpts
+						)
+						if (svgExport) {
+							addPageToPrint(`tldraw — ${page.name}`, `${i}/${pages.length}`, svgExport.svg)
 						}
 					}
 					triggerPrint()
 				} else {
 					const page = editor.getCurrentPage()
-					const svg = await editor.getSvg(editor.getSortedChildIdsForParent(page.id), svgOpts)
-					if (svg) {
-						addPageToPrint(`tldraw — ${page.name}`, null, svg)
+					const svgExport = await editor.getSvgString(
+						editor.getSortedChildIdsForParent(page.id),
+						svgOpts
+					)
+					if (svgExport) {
+						addPageToPrint(`tldraw — ${page.name}`, null, svgExport.svg)
 						triggerPrint()
 					}
 				}

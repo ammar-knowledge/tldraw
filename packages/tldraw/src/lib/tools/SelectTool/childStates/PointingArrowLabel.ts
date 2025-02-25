@@ -4,18 +4,21 @@ import {
 	Group2d,
 	StateNode,
 	TLArrowShape,
-	TLEventHandlers,
 	TLPointerEventInfo,
 	TLShapeId,
 	Vec,
 	getPointInArcT,
 } from '@tldraw/editor'
+import { getArrowInfo } from '../../../shapes/arrow/shared'
 
 export class PointingArrowLabel extends StateNode {
 	static override id = 'pointing_arrow_label'
 
 	shapeId = '' as TLShapeId
 	markId = ''
+	wasAlreadySelected = false
+	didDrag = false
+	didCtrlOnEnter = false
 
 	private info = {} as TLPointerEventInfo & {
 		shape: TLArrowShape
@@ -24,25 +27,23 @@ export class PointingArrowLabel extends StateNode {
 	}
 
 	private updateCursor() {
-		this.editor.updateInstanceState({
-			cursor: {
-				type: 'grabbing',
-				rotation: 0,
-			},
-		})
+		this.editor.setCursor({ type: 'grabbing', rotation: 0 })
 	}
 
-	override onEnter = (
+	override onEnter(
 		info: TLPointerEventInfo & {
 			shape: TLArrowShape
 			onInteractionEnd?: string
 			isCreating: boolean
 		}
-	) => {
+	) {
 		const { shape } = info
 		this.parent.setCurrentToolIdMask(info.onInteractionEnd)
 		this.info = info
 		this.shapeId = shape.id
+		this.didDrag = false
+		this.didCtrlOnEnter = info.accelKey
+		this.wasAlreadySelected = this.editor.getOnlySelectedShapeId() === shape.id
 		this.updateCursor()
 
 		const geometry = this.editor.getShapeGeometry<Group2d>(shape)
@@ -55,30 +56,40 @@ export class PointingArrowLabel extends StateNode {
 
 		this._labelDragOffset = Vec.Sub(labelGeometry.center, pointInShapeSpace)
 
-		this.markId = 'label-drag start'
-		this.editor.mark(this.markId)
+		this.markId = this.editor.markHistoryStoppingPoint('label-drag start')
+
+		const additiveSelectionKey = info.shiftKey || info.accelKey
+		if (additiveSelectionKey) {
+			const selectedShapeIds = this.editor.getSelectedShapeIds()
+			this.editor.setSelectedShapes([...selectedShapeIds, this.shapeId])
+
+			return
+		}
+
 		this.editor.setSelectedShapes([this.shapeId])
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.parent.setCurrentToolIdMask(undefined)
 
-		this.editor.updateInstanceState(
-			{ cursor: { type: 'default', rotation: 0 } },
-			{ ephemeral: true }
-		)
+		this.editor.setCursor({ type: 'default', rotation: 0 })
 	}
 
 	private _labelDragOffset = new Vec(0, 0)
 
-	override onPointerMove = () => {
+	override onPointerMove() {
 		const { isDragging } = this.editor.inputs
 		if (!isDragging) return
+
+		if (this.didCtrlOnEnter) {
+			this.parent.transition('brushing', this.info)
+			return
+		}
 
 		const shape = this.editor.getShape<TLArrowShape>(this.shapeId)
 		if (!shape) return
 
-		const info = this.editor.getArrowInfo(shape)!
+		const info = getArrowInfo(this.editor, shape)!
 
 		const groupGeometry = this.editor.getShapeGeometry<Group2d>(shape)
 		const bodyGeometry = groupGeometry.children[0] as Geometry2d
@@ -101,25 +112,40 @@ export class PointingArrowLabel extends StateNode {
 			nextLabelPosition = getPointInArcT(measure, angleStart, angleEnd, _center.angle(nearestPoint))
 		}
 
-		this.editor.updateShape<TLArrowShape>(
-			{ id: shape.id, type: shape.type, props: { labelPosition: nextLabelPosition } },
-			{ squashing: true }
-		)
+		if (isNaN(nextLabelPosition)) {
+			nextLabelPosition = 0.5
+		}
+
+		this.didDrag = true
+		this.editor.updateShape<TLArrowShape>({
+			id: shape.id,
+			type: shape.type,
+			props: { labelPosition: nextLabelPosition },
+		})
 	}
 
-	override onPointerUp = () => {
-		this.complete()
+	override onPointerUp() {
+		const shape = this.editor.getShape<TLArrowShape>(this.shapeId)
+		if (!shape) return
+
+		if (this.didDrag || !this.wasAlreadySelected) {
+			this.complete()
+		} else if (!this.editor.getIsReadonly()) {
+			// Go into edit mode.
+			this.editor.setEditingShape(shape.id)
+			this.editor.setCurrentTool('select.editing_shape')
+		}
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.cancel()
 	}
 
-	override onInterrupt = () => {
+	override onInterrupt() {
 		this.cancel()
 	}
 

@@ -45,19 +45,10 @@ const Author = createRecordType<Author>('author', {
 	isPseudonym: false,
 }))
 
-const schema = StoreSchema.create<Book | Author>(
-	{
-		book: Book,
-		author: Author,
-	},
-	{
-		snapshotMigrations: {
-			currentVersion: 0,
-			firstVersion: 0,
-			migrators: {},
-		},
-	}
-)
+const schema = StoreSchema.create<Book | Author>({
+	book: Book,
+	author: Author,
+})
 
 describe('Store with validation', () => {
 	let store: Store<Book | Author>
@@ -112,14 +103,14 @@ describe('Validating initial data', () => {
 	it('Validates initial data', () => {
 		expect(() => {
 			new Store<Book | Author>({ schema, initialData: snapshot, props: {} })
-		}).not.toThrowError()
+		}).not.toThrow()
 
 		expect(() => {
 			// @ts-expect-error
 			snapshot[0].name = 4
 
 			new Store<Book | Author>({ schema, initialData: snapshot, props: {} })
-		}).toThrowError()
+		}).toThrow()
 	})
 })
 

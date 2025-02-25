@@ -1,18 +1,20 @@
 import {
-	GapsSnapLine,
+	GapsSnapIndicator,
 	PI,
 	PI2,
-	PointsSnapLine,
+	PointsSnapIndicator,
 	RotateCorner,
 	TLGeoShape,
 	TLSelectionHandle,
 	TLShapeId,
 	TLShapePartial,
+	TLTextShape,
 	Vec,
 	canonicalizeRotation,
 	createShapeId,
 	rotateSelectionHandle,
 } from '@tldraw/editor'
+import { NoteShapeUtil } from '../lib/shapes/note/NoteShapeUtil'
 import { TestEditor } from './TestEditor'
 import { getSnapLines } from './getSnapLines'
 import { roundedBox } from './roundedBox'
@@ -935,10 +937,12 @@ describe('When resizing a shape with children', () => {
 })
 
 function getGapAndPointLines() {
-	const gapLines = editor.snaps.getLines().filter((snap) => snap.type === 'gaps') as GapsSnapLine[]
+	const gapLines = editor.snaps
+		.getIndicators()
+		.filter((snap) => snap.type === 'gaps') as GapsSnapIndicator[]
 	const pointLines = editor.snaps
-		.getLines()
-		.filter((snap) => snap.type === 'points') as PointsSnapLine[]
+		.getIndicators()
+		.filter((snap) => snap.type === 'points') as PointsSnapIndicator[]
 	return { gapLines, pointLines }
 }
 
@@ -982,12 +986,12 @@ describe('snapping while resizing', () => {
 			.pointerMove(115, 59, { ctrlKey: true })
 
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 60, props: { w: 60, h: 80 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		// moving the mouse horizontally should not change things
 		editor.pointerMove(15, 65, { ctrlKey: true })
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 60, props: { w: 60, h: 80 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(6)
 
@@ -995,7 +999,7 @@ describe('snapping while resizing', () => {
 		editor.pointerMove(15, 43, { ctrlKey: true })
 
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 40, props: { w: 60, h: 100 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(4)
 	})
@@ -1012,7 +1016,7 @@ describe('snapping while resizing', () => {
 			.pointerMove(156, 115, { ctrlKey: true })
 
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 80, props: { w: 80, h: 60 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(6)
 
@@ -1023,7 +1027,7 @@ describe('snapping while resizing', () => {
 		// snap to left edge of B
 		editor.pointerMove(173, 280, { ctrlKey: true })
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 80, props: { w: 100, h: 60 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(4)
 	})
 
@@ -1038,19 +1042,19 @@ describe('snapping while resizing', () => {
 			.pointerMove(115, 159, { ctrlKey: true })
 
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 80, props: { w: 60, h: 80 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(6)
 
 		// changing horzontal mouse position should not change things
 		editor.pointerMove(315, 163, { ctrlKey: true })
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 80, props: { w: 60, h: 80 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		// snap to top edge of C
 		editor.pointerMove(115, 183, { ctrlKey: true })
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 80, y: 80, props: { w: 60, h: 100 } })
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(4)
 	})
@@ -1067,7 +1071,7 @@ describe('snapping while resizing', () => {
 
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 60, y: 80, props: { w: 80, h: 60 } })
 
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(6)
 
 		// moving the mouse vertically should not change things
@@ -1078,7 +1082,7 @@ describe('snapping while resizing', () => {
 		editor.pointerMove(39, 280, { ctrlKey: true })
 		expect(editor.getShape(ids.boxX)).toMatchObject({ x: 40, y: 80, props: { w: 100, h: 60 } })
 
-		expect(editor.snaps.getLines().length).toBe(1)
+		expect(editor.snaps.getIndicators().length).toBe(1)
 		expect(getGapAndPointLines().pointLines[0].points).toHaveLength(4)
 	})
 	it('works for dragging the top left corner', () => {
@@ -3017,7 +3021,7 @@ describe('resizing a shape with a child', () => {
 			.pointerDown(0, 0, { target: 'selection', handle: 'top_left' })
 			.pointerMove(25, 25, { ctrlKey: true })
 
-		expect(editor.snaps.getLines().length).toBe(0)
+		expect(editor.snaps.getIndicators().length).toBe(0)
 		expect(editor.getShape(ids.boxA)).toMatchObject({ x: 25, y: 25, props: { w: 25, h: 25 } })
 		expect(editor.getShape(ids.boxB)).toMatchObject({ x: 0.5, y: 0.5, props: { w: 5, h: 5 } })
 		expect(editor.getShapePageBounds(ids.boxB)).toMatchObject({
@@ -3539,7 +3543,32 @@ describe('resizing a selection of mixed rotations', () => {
 // 	})
 // })
 
-describe('nodes that have do not resize', () => {
+describe('editor.resizeNoteShape', () => {
+	beforeEach(() => {
+		editor.getShapeUtil<NoteShapeUtil>('note').options.resizeMode = 'scale'
+	})
+
+	it('can scale when that option is set to true', () => {
+		const noteBId = createShapeId('noteB')
+		editor.createShapes([box(ids.boxA, 0, 0, 200, 200), { id: noteBId, type: 'note', x: 0, y: 0 }])
+
+		// the default width and height of a note is 200
+		expect(editor.getShapePageBounds(ids.boxA)).toMatchObject({ x: 0, y: 0, w: 200, h: 200 })
+		expect(editor.getShapePageBounds(noteBId)).toMatchObject({ x: 0, y: 0, w: 200, h: 200 })
+
+		editor.select(ids.boxA, noteBId)
+
+		editor.resizeSelection({ scaleX: 2, scaleY: 2.1 }, 'bottom_right')
+
+		expect(editor.getShapePageBounds(ids.boxA)).toMatchObject({ x: 0, y: 0, w: 420, h: 420 })
+
+		expect(editor.getShape(noteBId)).toMatchObject({ x: 0, y: 0, props: { scale: 2.1 } }) // but scaled!
+
+		expect(editor.getShapePageBounds(noteBId)).toMatchObject({ x: 0, y: 0, w: 420, h: 420 })
+	})
+})
+
+describe('shapes that have do not resize', () => {
 	it('are still translated if part of a selection', () => {
 		const noteBId = createShapeId('noteB')
 		editor.createShapes([box(ids.boxA, 0, 0, 200, 200), { id: noteBId, type: 'note', x: 0, y: 0 }])
@@ -3550,12 +3579,13 @@ describe('nodes that have do not resize', () => {
 
 		editor.select(ids.boxA, noteBId)
 
-		editor.resizeSelection({ scaleX: 2, scaleY: 2 }, 'bottom_right')
+		editor.resizeSelection({ scaleX: 2, scaleY: 2.1 }, 'bottom_right')
 
-		expect(editor.getShapePageBounds(ids.boxA)).toMatchObject({ x: 0, y: 0, w: 400, h: 400 })
+		expect(editor.getShapePageBounds(ids.boxA)).toMatchObject({ x: 0, y: 0, w: 400, h: 420 })
 		// noteB should be in the middle of boxA
-		expect(editor.getShapePageBounds(noteBId)).toMatchObject({ x: 100, y: 100, w: 200, h: 200 })
+		expect(editor.getShapePageBounds(noteBId)).toMatchObject({ x: 100, y: 110, w: 200, h: 200 })
 	})
+
 	it('can flip', () => {
 		const noteBId = createShapeId('noteB')
 		const noteCId = createShapeId('noteC')
@@ -3913,5 +3943,149 @@ describe('When resizing near the edges of the screen', () => {
 		expect(after.y).toBeLessThan(before.y)
 		expect(after.props.w).toBeGreaterThan(before.props.w)
 		expect(after.props.h).toBeGreaterThan(before.props.h)
+	})
+})
+
+describe('resizing text with autosize true', () => {
+	it('resizes text from the right side', () => {
+		editor.createShape<TLTextShape>({
+			type: 'text',
+			x: 0,
+			y: 0,
+			props: {
+				text: 'Hello',
+				autoSize: false,
+				w: 200,
+			},
+		})
+
+		const shape = editor.getLastCreatedShape()
+
+		const bounds = editor.getShapePageBounds(shape.id)!
+		editor
+			.select(shape)
+			.pointerDown(bounds.maxX, bounds.midY, { target: 'selection', handle: 'right' }) // right edge
+			.expectToBeIn('select.pointing_resize_handle')
+			.pointerMove(bounds.maxX + 100, bounds.midY)
+			.expectToBeIn('select.resizing')
+			.expectShapeToMatch({ ...shape, x: 0, y: 0, props: { w: 300 } })
+			.pointerMove(bounds.maxX - 10, bounds.midY)
+			.expectShapeToMatch({ ...shape, x: 0, y: 0, props: { w: 190 } })
+	})
+
+	it('resizes text from the right side when alt key is pressed', () => {
+		editor.createShape<TLTextShape>({
+			type: 'text',
+			x: 0,
+			y: 0,
+			props: {
+				text: 'Hello',
+				autoSize: false,
+				w: 200,
+			},
+		})
+
+		const shape = editor.getLastCreatedShape()
+
+		const bounds = editor.getShapePageBounds(shape.id)!
+		editor
+			.select(shape)
+			.keyDown('Alt')
+			.pointerDown(bounds.maxX, bounds.midY, { target: 'selection', handle: 'right' }) // right edge
+			.expectToBeIn('select.pointing_resize_handle')
+			.pointerMove(bounds.maxX + 100, bounds.midY)
+			.expectToBeIn('select.resizing')
+			.expectShapeToMatch({ ...shape, x: -100, y: 0, props: { w: 400 } })
+			.pointerMove(bounds.maxX - 10, bounds.midY)
+			.expectShapeToMatch({ ...shape, x: 10, y: 0, props: { w: 180 } })
+	})
+
+	it('resizes text from the left side', () => {
+		editor.createShape<TLTextShape>({
+			type: 'text',
+			x: 0,
+			y: 0,
+			props: {
+				text: 'Hello',
+				autoSize: false,
+				w: 200,
+			},
+		})
+
+		const shape = editor.getLastCreatedShape()
+
+		const bounds = editor.getShapePageBounds(shape.id)!
+		editor
+			.select(shape)
+			.pointerDown(bounds.minX, bounds.midY, { target: 'selection', handle: 'left' }) // right edge
+			.expectToBeIn('select.pointing_resize_handle')
+			.pointerMove(bounds.minX - 100, bounds.midY)
+			.expectToBeIn('select.resizing')
+			.expectShapeToMatch({ ...shape, x: -100, y: 0, props: { w: 300 } })
+			.pointerMove(bounds.minX + 10, bounds.midY)
+			.expectShapeToMatch({ ...shape, x: 10, y: 0, props: { w: 190 } })
+	})
+
+	it('resizes text from the left side when alt is pressed', () => {
+		editor.createShape<TLTextShape>({
+			type: 'text',
+			x: 0,
+			y: 0,
+			props: {
+				text: 'Hello',
+				autoSize: false,
+				w: 200,
+			},
+		})
+
+		const shape = editor.getLastCreatedShape()
+
+		const bounds = editor.getShapePageBounds(shape.id)!
+		editor
+			.select(shape)
+			.keyDown('Alt')
+			.pointerDown(bounds.minX, bounds.midY, { target: 'selection', handle: 'left' }) // right edge
+			.expectToBeIn('select.pointing_resize_handle')
+			.pointerMove(bounds.minX - 100, bounds.midY)
+			.expectToBeIn('select.resizing')
+			.expectShapeToMatch({ ...shape, x: -100, y: 0, props: { w: 400 } })
+			.pointerMove(bounds.minX + 10, bounds.midY)
+			.expectShapeToMatch({ ...shape, x: 10, y: 0, props: { w: 180 } })
+	})
+})
+
+describe('cancelling a resize operation', () => {
+	it('undoes any changes since the start of the resize operation', () => {
+		editor.createShape<TLGeoShape>({
+			type: 'geo',
+			x: 0,
+			y: 0,
+			props: {
+				w: 100,
+				h: 100,
+			},
+		})
+
+		const shape = editor.getLastCreatedShape()
+
+		editor.select(shape)
+
+		const bounds = editor.getShapePageBounds(shape.id)!
+		editor.pointerDown(bounds.maxX, bounds.midY, { target: 'selection', handle: 'right' }) // right edge
+		editor.pointerMove(bounds.maxX + 100, bounds.midY)
+		expect(editor.getShapePageBounds(shape.id)).toMatchObject({ x: 0, y: 0, w: 200, h: 100 })
+		editor.cancel()
+		expect(editor.getShapePageBounds(shape.id)).toMatchObject({ x: 0, y: 0, w: 100, h: 100 })
+	})
+
+	it('undoes the shape creation if creating a shape', () => {
+		editor.setCurrentTool('geo')
+		editor.pointerDown(0, 0)
+		editor.pointerMove(100, 100)
+		editor.expectToBeIn('select.resizing')
+		const shape = editor.getLastCreatedShape()
+		expect(editor.getShapePageBounds(shape)).toMatchObject({ x: 0, y: 0, w: 100, h: 100 })
+		editor.cancel()
+		expect(editor.getShape(shape.id)).toBeUndefined()
 	})
 })

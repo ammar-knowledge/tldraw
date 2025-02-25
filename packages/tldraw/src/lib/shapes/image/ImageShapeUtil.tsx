@@ -1,56 +1,46 @@
-/* eslint-disable react-hooks/rules-of-hooks */
 import {
 	BaseBoxShapeUtil,
+	Editor,
+	FileHelpers,
 	HTMLContainer,
+	Image,
+	MediaHelpers,
+	SvgExportContext,
+	TLAsset,
+	TLAssetId,
 	TLImageShape,
-	TLOnDoubleClickHandler,
+	TLImageShapeProps,
+	TLResizeInfo,
 	TLShapePartial,
 	Vec,
-	deepCopy,
+	WeakCache,
+	fetch,
 	imageShapeMigrations,
 	imageShapeProps,
+	lerp,
+	resizeBox,
+	structuredClone,
 	toDomPrecision,
-	useIsCropping,
+	useEditor,
+	useUniqueSafeId,
 	useValue,
 } from '@tldraw/editor'
-import { useEffect, useState } from 'react'
+import classNames from 'classnames'
+import { memo, useEffect, useState } from 'react'
+
+import { BrokenAssetIcon } from '../shared/BrokenAssetIcon'
 import { HyperlinkButton } from '../shared/HyperlinkButton'
+import { getUncroppedSize } from '../shared/crop'
+import { useImageOrVideoAsset } from '../shared/useImageOrVideoAsset'
 import { usePrefersReducedMotion } from '../shared/usePrefersReducedMotion'
-
-const loadImage = async (url: string): Promise<HTMLImageElement> => {
-	return new Promise((resolve, reject) => {
-		const image = new Image()
-		image.onload = () => resolve(image)
-		image.onerror = () => reject(new Error('Failed to load image'))
-		image.crossOrigin = 'anonymous'
-		image.src = url
-	})
-}
-
-const getStateFrame = async (url: string) => {
-	const image = await loadImage(url)
-
-	const canvas = document.createElement('canvas')
-	canvas.width = image.width
-	canvas.height = image.height
-
-	const ctx = canvas.getContext('2d')
-	if (!ctx) return
-
-	ctx.drawImage(image, 0, 0)
-	return canvas.toDataURL()
-}
 
 async function getDataURIFromURL(url: string): Promise<string> {
 	const response = await fetch(url)
 	const blob = await response.blob()
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader()
-		reader.onloadend = () => resolve(reader.result as string)
-		reader.onerror = reject
-		reader.readAsDataURL(blob)
-	})
+	return FileHelpers.blobToDataUrl(blob)
 }
+
+const imageSvgExportCache = new WeakCache<TLAsset, Promise<string | null>>()
 
 /** @public */
 export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
@@ -58,8 +48,12 @@ export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
 	static override props = imageShapeProps
 	static override migrations = imageShapeMigrations
 
-	override isAspectRatioLocked = () => true
-	override canCrop = () => true
+	override isAspectRatioLocked() {
+		return true
+	}
+	override canCrop() {
+		return true
+	}
 
 	override getDefaultProps(): TLImageShape['props'] {
 		return {
@@ -69,186 +63,97 @@ export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
 			playing: true,
 			url: '',
 			crop: null,
+			flipX: false,
+			flipY: false,
 		}
+	}
+
+	override onResize(shape: TLImageShape, info: TLResizeInfo<TLImageShape>) {
+		let resized: TLImageShape = resizeBox(shape, info)
+		const { flipX, flipY } = info.initialShape.props
+		const { scaleX, scaleY, mode } = info
+
+		resized = {
+			...resized,
+			props: {
+				...resized.props,
+				flipX: scaleX < 0 !== flipX,
+				flipY: scaleY < 0 !== flipY,
+			},
+		}
+		if (!shape.props.crop) return resized
+
+		const flipCropHorizontally =
+			// We used the flip horizontally feature
+			(mode === 'scale_shape' && scaleX === -1) ||
+			// We resized the shape past it's bounds, so it flipped
+			(mode === 'resize_bounds' && flipX !== resized.props.flipX)
+		const flipCropVertically =
+			// We used the flip vertically feature
+			(mode === 'scale_shape' && scaleY === -1) ||
+			// We resized the shape past it's bounds, so it flipped
+			(mode === 'resize_bounds' && flipY !== resized.props.flipY)
+
+		const { topLeft, bottomRight } = shape.props.crop
+		resized.props.crop = {
+			topLeft: {
+				x: flipCropHorizontally ? 1 - bottomRight.x : topLeft.x,
+				y: flipCropVertically ? 1 - bottomRight.y : topLeft.y,
+			},
+			bottomRight: {
+				x: flipCropHorizontally ? 1 - topLeft.x : bottomRight.x,
+				y: flipCropVertically ? 1 - topLeft.y : bottomRight.y,
+			},
+		}
+		return resized
 	}
 
 	component(shape: TLImageShape) {
-		const containerStyle = getContainerStyle(shape)
-		const isCropping = useIsCropping(shape.id)
-		const prefersReducedMotion = usePrefersReducedMotion()
-		const [staticFrameSrc, setStaticFrameSrc] = useState('')
-
-		const asset = shape.props.assetId ? this.editor.getAsset(shape.props.assetId) : undefined
-
-		if (asset?.type === 'bookmark') {
-			throw Error("Bookmark assets can't be rendered as images")
-		}
-
-		const isSelected = useValue(
-			'onlySelectedShape',
-			() => shape.id === this.editor.getOnlySelectedShape()?.id,
-			[this.editor]
-		)
-
-		const showCropPreview =
-			isSelected &&
-			isCropping &&
-			this.editor.isInAny('select.crop', 'select.cropping', 'select.pointing_crop_handle')
-
-		// We only want to reduce motion for mimeTypes that have motion
-		const reduceMotion =
-			prefersReducedMotion &&
-			(asset?.props.mimeType?.includes('video') || asset?.props.mimeType?.includes('gif'))
-
-		useEffect(() => {
-			if (asset?.props.src && 'mimeType' in asset.props && asset?.props.mimeType === 'image/gif') {
-				let cancelled = false
-				const run = async () => {
-					const newStaticFrame = await getStateFrame(asset.props.src!)
-					if (cancelled) return
-					if (newStaticFrame) {
-						setStaticFrameSrc(newStaticFrame)
-					}
-				}
-				run()
-
-				return () => {
-					cancelled = true
-				}
-			}
-		}, [prefersReducedMotion, asset?.props])
-
-		return (
-			<>
-				{asset?.props.src && showCropPreview && (
-					<div style={containerStyle}>
-						<div
-							className="tl-image"
-							style={{
-								opacity: 0.1,
-								backgroundImage: `url(${
-									!shape.props.playing || reduceMotion ? staticFrameSrc : asset.props.src
-								})`,
-							}}
-							draggable={false}
-						/>
-					</div>
-				)}
-				<HTMLContainer
-					id={shape.id}
-					style={{ overflow: 'hidden', width: shape.props.w, height: shape.props.h }}
-				>
-					<div className="tl-image-container" style={containerStyle}>
-						{asset?.props.src ? (
-							<div
-								className="tl-image"
-								style={{
-									backgroundImage: `url(${
-										!shape.props.playing || reduceMotion ? staticFrameSrc : asset.props.src
-									})`,
-								}}
-								draggable={false}
-							/>
-						) : null}
-						{asset?.props.isAnimated && !shape.props.playing && (
-							<div className="tl-image__tg">GIF</div>
-						)}
-					</div>
-					{'url' in shape.props && shape.props.url && (
-						<HyperlinkButton url={shape.props.url} zoomLevel={this.editor.getZoomLevel()} />
-					)}
-				</HTMLContainer>
-			</>
-		)
+		return <ImageShape shape={shape} />
 	}
 
 	indicator(shape: TLImageShape) {
-		const isCropping = useIsCropping(shape.id)
-		if (isCropping) {
-			return null
-		}
+		const isCropping = this.editor.getCroppingShapeId() === shape.id
+		if (isCropping) return null
 		return <rect width={toDomPrecision(shape.props.w)} height={toDomPrecision(shape.props.h)} />
 	}
 
-	shouldGetDataURI(src: string) {
-		return src && (src.startsWith('http') || src.startsWith('/') || src.startsWith('./'))
+	override async toSvg(shape: TLImageShape, ctx: SvgExportContext) {
+		if (!shape.props.assetId) return null
+
+		const asset = this.editor.getAsset(shape.props.assetId)
+
+		if (!asset) return null
+
+		const { w } = getUncroppedSize(shape.props, shape.props.crop)
+
+		const src = await imageSvgExportCache.get(asset, async () => {
+			let src = await ctx.resolveAssetUrl(asset.id, w)
+			if (!src) return null
+			if (
+				src.startsWith('blob:') ||
+				src.startsWith('http') ||
+				src.startsWith('/') ||
+				src.startsWith('./')
+			) {
+				// If it's a remote image, we need to fetch it and convert it to a data URI
+				src = (await getDataURIFromURL(src)) || ''
+			}
+
+			// If it's animated then we need to get the first frame
+			if (getIsAnimated(this.editor, asset.id)) {
+				const { promise } = getFirstFrameOfAnimatedImage(src)
+				src = await promise
+			}
+			return src
+		})
+
+		if (!src) return null
+
+		return <SvgImage shape={shape} src={src} />
 	}
 
-	override async toSvg(shape: TLImageShape) {
-		const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-		const asset = shape.props.assetId ? this.editor.getAsset(shape.props.assetId) : null
-
-		let src = asset?.props.src || ''
-		if (this.shouldGetDataURI(src)) {
-			// If it's a remote image, we need to fetch it and convert it to a data URI
-			src = (await getDataURIFromURL(src)) || ''
-		}
-
-		const image = document.createElementNS('http://www.w3.org/2000/svg', 'image')
-		image.setAttributeNS('http://www.w3.org/1999/xlink', 'href', src)
-		const containerStyle = getContainerStyle(shape)
-		const crop = shape.props.crop
-		if (containerStyle.transform && crop) {
-			const { transform, width, height } = containerStyle
-			const croppedWidth = (crop.bottomRight.x - crop.topLeft.x) * width
-			const croppedHeight = (crop.bottomRight.y - crop.topLeft.y) * height
-
-			const points = [
-				new Vec(0, 0),
-				new Vec(croppedWidth, 0),
-				new Vec(croppedWidth, croppedHeight),
-				new Vec(0, croppedHeight),
-			]
-
-			const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
-			polygon.setAttribute('points', points.map((p) => `${p.x},${p.y}`).join(' '))
-
-			const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath')
-			clipPath.setAttribute('id', 'cropClipPath')
-			clipPath.appendChild(polygon)
-
-			const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-			defs.appendChild(clipPath)
-			g.appendChild(defs)
-
-			const innerElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-			innerElement.setAttribute('clip-path', 'url(#cropClipPath)')
-			image.setAttribute('width', width.toString())
-			image.setAttribute('height', height.toString())
-			image.style.transform = transform
-			innerElement.appendChild(image)
-			g.appendChild(innerElement)
-		} else {
-			image.setAttribute('width', shape.props.w.toString())
-			image.setAttribute('height', shape.props.h.toString())
-			g.appendChild(image)
-		}
-
-		return g
-	}
-
-	override onDoubleClick = (shape: TLImageShape) => {
-		const asset = shape.props.assetId ? this.editor.getAsset(shape.props.assetId) : undefined
-
-		if (!asset) return
-
-		const canPlay =
-			asset.props.src && 'mimeType' in asset.props && asset.props.mimeType === 'image/gif'
-
-		if (!canPlay) return
-
-		this.editor.updateShapes([
-			{
-				type: 'image',
-				id: shape.id,
-				props: {
-					playing: !shape.props.playing,
-				},
-			},
-		])
-	}
-
-	override onDoubleClickEdge: TLOnDoubleClickHandler<TLImageShape> = (shape) => {
+	override onDoubleClickEdge(shape: TLImageShape) {
 		const props = shape.props
 		if (!props) return
 
@@ -256,14 +161,13 @@ export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
 			return
 		}
 
-		const crop = deepCopy(props.crop) || {
+		const crop = structuredClone(props.crop) || {
 			topLeft: { x: 0, y: 0 },
 			bottomRight: { x: 1, y: 1 },
 		}
 
 		// The true asset dimensions
-		const w = (1 / (crop.bottomRight.x - crop.topLeft.x)) * shape.props.w
-		const h = (1 / (crop.bottomRight.y - crop.topLeft.y)) * shape.props.h
+		const { w, h } = getUncroppedSize(shape.props, crop)
 
 		const pointDelta = new Vec(crop.topLeft.x * w, crop.topLeft.y * h).rot(shape.rotation)
 
@@ -284,6 +188,179 @@ export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
 
 		this.editor.updateShapes([partial])
 	}
+	override getInterpolatedProps(
+		startShape: TLImageShape,
+		endShape: TLImageShape,
+		t: number
+	): TLImageShapeProps {
+		function interpolateCrop(
+			startShape: TLImageShape,
+			endShape: TLImageShape
+		): TLImageShapeProps['crop'] {
+			if (startShape.props.crop === null && endShape.props.crop === null) return null
+
+			const startTL = startShape.props.crop?.topLeft || { x: 0, y: 0 }
+			const startBR = startShape.props.crop?.bottomRight || { x: 1, y: 1 }
+			const endTL = endShape.props.crop?.topLeft || { x: 0, y: 0 }
+			const endBR = endShape.props.crop?.bottomRight || { x: 1, y: 1 }
+
+			return {
+				topLeft: { x: lerp(startTL.x, endTL.x, t), y: lerp(startTL.y, endTL.y, t) },
+				bottomRight: { x: lerp(startBR.x, endBR.x, t), y: lerp(startBR.y, endBR.y, t) },
+			}
+		}
+
+		return {
+			...(t > 0.5 ? endShape.props : startShape.props),
+			w: lerp(startShape.props.w, endShape.props.w, t),
+			h: lerp(startShape.props.h, endShape.props.h, t),
+			crop: interpolateCrop(startShape, endShape),
+		}
+	}
+}
+
+const ImageShape = memo(function ImageShape({ shape }: { shape: TLImageShape }) {
+	const editor = useEditor()
+
+	const { w } = getUncroppedSize(shape.props, shape.props.crop)
+	const { asset, url } = useImageOrVideoAsset({
+		shapeId: shape.id,
+		assetId: shape.props.assetId,
+		width: w,
+	})
+
+	const prefersReducedMotion = usePrefersReducedMotion()
+	const [staticFrameSrc, setStaticFrameSrc] = useState('')
+	const [loadedUrl, setLoadedUrl] = useState<null | string>(null)
+
+	const isAnimated = asset && getIsAnimated(editor, asset.id)
+
+	useEffect(() => {
+		if (url && isAnimated) {
+			const { promise, cancel } = getFirstFrameOfAnimatedImage(url)
+
+			promise.then((dataUrl) => {
+				setStaticFrameSrc(dataUrl)
+				setLoadedUrl(url)
+			})
+
+			return () => {
+				cancel()
+			}
+		}
+	}, [editor, isAnimated, prefersReducedMotion, url])
+
+	const showCropPreview = useValue(
+		'show crop preview',
+		() =>
+			shape.id === editor.getOnlySelectedShapeId() &&
+			editor.getCroppingShapeId() === shape.id &&
+			editor.isIn('select.crop'),
+		[editor, shape.id]
+	)
+
+	// We only want to reduce motion for mimeTypes that have motion
+	const reduceMotion =
+		prefersReducedMotion && (asset?.props.mimeType?.includes('video') || isAnimated)
+
+	const containerStyle = getCroppedContainerStyle(shape)
+
+	const nextSrc = url === loadedUrl ? null : url
+	const loadedSrc = reduceMotion ? staticFrameSrc : loadedUrl
+
+	// This logic path is for when it's broken/missing asset.
+	if (!url && !asset?.props.src) {
+		return (
+			<HTMLContainer
+				id={shape.id}
+				style={{
+					overflow: 'hidden',
+					width: shape.props.w,
+					height: shape.props.h,
+					color: 'var(--color-text-3)',
+					backgroundColor: 'var(--color-low)',
+					border: '1px solid var(--color-low-border)',
+				}}
+			>
+				<div
+					className={classNames('tl-image-container', asset && 'tl-image-container-loading')}
+					style={containerStyle}
+				>
+					{asset ? null : <BrokenAssetIcon />}
+				</div>
+				{'url' in shape.props && shape.props.url && <HyperlinkButton url={shape.props.url} />}
+			</HTMLContainer>
+		)
+	}
+
+	// We don't set crossOrigin for non-animated images because for Cloudflare we don't currently
+	// have that set up.
+	const crossOrigin = isAnimated ? 'anonymous' : undefined
+
+	return (
+		<>
+			{showCropPreview && loadedSrc && (
+				<div style={containerStyle}>
+					<img
+						className="tl-image"
+						style={{ ...getFlipStyle(shape), opacity: 0.1 }}
+						crossOrigin={crossOrigin}
+						src={loadedSrc}
+						referrerPolicy="strict-origin-when-cross-origin"
+						draggable={false}
+					/>
+				</div>
+			)}
+			<HTMLContainer
+				id={shape.id}
+				style={{ overflow: 'hidden', width: shape.props.w, height: shape.props.h }}
+			>
+				<div className={classNames('tl-image-container')} style={containerStyle}>
+					{/* We have two images: the currently loaded image, and the next image that
+					we're waiting to load. we keep the loaded image mounted while we're waiting
+					for the next one by storing the loaded URL in state. We use `key` props with
+					the src of the image so that when the next image is ready, the previous one will
+					be unmounted and the next will be shown with the browser having to remount a
+					fresh image and decoded it again from the cache. */}
+					{loadedSrc && (
+						<img
+							key={loadedSrc}
+							className="tl-image"
+							style={getFlipStyle(shape)}
+							crossOrigin={crossOrigin}
+							src={loadedSrc}
+							referrerPolicy="strict-origin-when-cross-origin"
+							draggable={false}
+						/>
+					)}
+					{nextSrc && (
+						<img
+							key={nextSrc}
+							className="tl-image"
+							style={getFlipStyle(shape)}
+							crossOrigin={crossOrigin}
+							src={nextSrc}
+							referrerPolicy="strict-origin-when-cross-origin"
+							draggable={false}
+							onLoad={() => setLoadedUrl(nextSrc)}
+						/>
+					)}
+				</div>
+				{shape.props.url && <HyperlinkButton url={shape.props.url} />}
+			</HTMLContainer>
+		</>
+	)
+})
+
+function getIsAnimated(editor: Editor, assetId: TLAssetId) {
+	const asset = assetId ? editor.getAsset(assetId) : undefined
+
+	if (!asset) return false
+
+	return (
+		('mimeType' in asset.props && MediaHelpers.isAnimatedImageType(asset?.props.mimeType)) ||
+		('isAnimated' in asset.props && asset.props.isAnimated)
+	)
 }
 
 /**
@@ -294,7 +371,7 @@ export class ImageShapeUtil extends BaseBoxShapeUtil<TLImageShape> {
  * @param shape - Shape The image shape for which to get the container style
  * @returns - Styles to apply to the image container
  */
-function getContainerStyle(shape: TLImageShape) {
+function getCroppedContainerStyle(shape: TLImageShape) {
 	const crop = shape.props.crop
 	const topLeft = crop?.topLeft
 	if (!topLeft) {
@@ -304,9 +381,7 @@ function getContainerStyle(shape: TLImageShape) {
 		}
 	}
 
-	const w = (1 / (crop.bottomRight.x - crop.topLeft.x)) * shape.props.w
-	const h = (1 / (crop.bottomRight.y - crop.topLeft.y)) * shape.props.h
-
+	const { w, h } = getUncroppedSize(shape.props, crop)
 	const offsetX = -topLeft.x * w
 	const offsetY = -topLeft.y * h
 	return {
@@ -314,4 +389,97 @@ function getContainerStyle(shape: TLImageShape) {
 		width: w,
 		height: h,
 	}
+}
+
+function getFlipStyle(shape: TLImageShape, size?: { width: number; height: number }) {
+	const { flipX, flipY } = shape.props
+	if (!flipX && !flipY) return undefined
+
+	const scale = `scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`
+	const translate = size
+		? `translate(${flipX ? size.width : 0}px, ${flipY ? size.height : 0}px)`
+		: ''
+
+	return {
+		transform: `${translate} ${scale}`,
+		// in SVG, flipping around the center doesn't work so we use explicit width/height
+		transformOrigin: size ? '0 0' : 'center center',
+	}
+}
+
+function SvgImage({ shape, src }: { shape: TLImageShape; src: string }) {
+	const cropClipId = useUniqueSafeId()
+	const containerStyle = getCroppedContainerStyle(shape)
+	const crop = shape.props.crop
+
+	if (containerStyle.transform && crop) {
+		const { transform: cropTransform, width, height } = containerStyle
+		const croppedWidth = (crop.bottomRight.x - crop.topLeft.x) * width
+		const croppedHeight = (crop.bottomRight.y - crop.topLeft.y) * height
+
+		const points = [
+			new Vec(0, 0),
+			new Vec(croppedWidth, 0),
+			new Vec(croppedWidth, croppedHeight),
+			new Vec(0, croppedHeight),
+		]
+
+		const flip = getFlipStyle(shape, { width, height })
+
+		return (
+			<>
+				<defs>
+					<clipPath id={cropClipId}>
+						<polygon points={points.map((p) => `${p.x},${p.y}`).join(' ')} />
+					</clipPath>
+				</defs>
+				<g clipPath={`url(#${cropClipId})`}>
+					<image
+						href={src}
+						width={width}
+						height={height}
+						style={
+							flip
+								? { ...flip, transform: `${cropTransform} ${flip.transform}` }
+								: { transform: cropTransform }
+						}
+					/>
+				</g>
+			</>
+		)
+	} else {
+		return (
+			<image
+				href={src}
+				width={shape.props.w}
+				height={shape.props.h}
+				style={getFlipStyle(shape, { width: shape.props.w, height: shape.props.h })}
+			/>
+		)
+	}
+}
+
+function getFirstFrameOfAnimatedImage(url: string) {
+	let cancelled = false
+
+	const promise = new Promise<string>((resolve) => {
+		const image = Image()
+		image.onload = () => {
+			if (cancelled) return
+
+			const canvas = document.createElement('canvas')
+			canvas.width = image.width
+			canvas.height = image.height
+
+			const ctx = canvas.getContext('2d')
+			if (!ctx) return
+
+			ctx.drawImage(image, 0, 0)
+			resolve(canvas.toDataURL())
+		}
+		image.crossOrigin = 'anonymous'
+		image.src = url
+	})
+
+	return { promise, cancel: () => (cancelled = true) }
 }

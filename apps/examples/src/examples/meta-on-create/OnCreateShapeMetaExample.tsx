@@ -1,5 +1,5 @@
-import { TLShape, Tldraw, track, useEditor } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { TLShape, Tldraw, track, useEditor } from 'tldraw'
+import 'tldraw/tldraw.css'
 
 // There's a guide at the bottom of this file!
 
@@ -7,7 +7,7 @@ export default function OnCreateShapeMetaExample() {
 	return (
 		<div className="tldraw__editor">
 			<Tldraw
-				persistenceKey="tldraw_example"
+				persistenceKey="example"
 				onMount={(editor) => {
 					//[1]
 					editor.getInitialMetaForShape = (_shape) => {

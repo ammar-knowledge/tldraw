@@ -7,32 +7,37 @@ import {
 	RESET_VALUE,
 	withDiff,
 } from '@tldraw/state'
-import { objectMapValues } from '@tldraw/utils'
+import { areArraysShallowEqual, objectMapValues } from '@tldraw/utils'
 import isEqual from 'lodash.isequal'
 import { IdOf, UnknownRecord } from './BaseRecord'
 import { executeQuery, objectMatchesQuery, QueryExpression } from './executeQuery'
 import { IncrementalSetConstructor } from './IncrementalSetConstructor'
+import { RecordsDiff } from './RecordsDiff'
 import { diffSets } from './setUtils'
-import { CollectionDiff, RecordsDiff } from './Store'
+import { CollectionDiff } from './Store'
 
+/** @public */
 export type RSIndexDiff<
 	R extends UnknownRecord,
 	Property extends string & keyof R = string & keyof R,
 > = Map<R[Property], CollectionDiff<IdOf<R>>>
 
+/** @public */
 export type RSIndexMap<
 	R extends UnknownRecord,
 	Property extends string & keyof R = string & keyof R,
 > = Map<R[Property], Set<IdOf<R>>>
 
+/** @public */
 export type RSIndex<
 	R extends UnknownRecord,
 	Property extends string & keyof R = string & keyof R,
-> = Computed<Map<R[Property], Set<IdOf<R>>>, RSIndexDiff<R, Property>>
+> = Computed<RSIndexMap<R, Property>, RSIndexDiff<R, Property>>
 
 /**
  * A class that provides a 'namespace' for the various kinds of indexes one may wish to derive from
  * the record store.
+ * @public
  */
 export class StoreQueries<R extends UnknownRecord> {
 	constructor(
@@ -55,7 +60,7 @@ export class StoreQueries<R extends UnknownRecord> {
 	private historyCache = new Map<string, Computed<number, RecordsDiff<R>>>()
 
 	/**
-	 * Create a derivation that contains the hisotry for a given type
+	 * Create a derivation that contains the history for a given type
 	 *
 	 * @param typeName - The name of the type to filter by.
 	 * @returns A derivation that returns the ids of all records of the given type.
@@ -328,15 +333,22 @@ export class StoreQueries<R extends UnknownRecord> {
 		type S = Extract<R, { typeName: TypeName }>
 		const ids = this.ids(typeName, queryCreator, 'ids:' + name)
 
-		return computed<S[]>(name, () => {
-			return [...ids.get()].map((id) => {
-				const atom = this.atoms.get()[id]
-				if (!atom) {
-					throw new Error('no atom found for record id: ' + id)
-				}
-				return atom.get() as S
-			})
-		})
+		return computed<S[]>(
+			name,
+			() => {
+				const atoms = this.atoms.get()
+				return [...ids.get()].map((id) => {
+					const atom = atoms[id]
+					if (!atom) {
+						throw new Error('no atom found for record id: ' + id)
+					}
+					return atom.get() as S
+				})
+			},
+			{
+				isEqual: areArraysShallowEqual,
+			}
+		)
 	}
 
 	/**

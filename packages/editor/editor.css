@@ -21,13 +21,43 @@
 	--radius-2: 6px;
 	--radius-3: 9px;
 	--radius-4: 11px;
-	/* Z Index */
-	--layer-background: 100;
-	--layer-grid: 150;
-	--layer-canvas: 200;
-	--layer-shapes: 300;
-	--layer-overlays: 400;
-	--layer-following-indicator: 1000;
+
+	/* Canvas z-index */
+	--layer-canvas-hidden: -999999;
+	--layer-canvas-background: 100;
+	--layer-canvas-grid: 150;
+	--layer-watermark: 200;
+	--layer-canvas-shapes: 300;
+	--layer-canvas-overlays: 500;
+	--layer-canvas-blocker: 10000;
+
+	/* Canvas overlays z-index */
+	--layer-overlays-collaborator-scribble: 10;
+	--layer-overlays-collaborator-brush: 20;
+	--layer-overlays-collaborator-shape-indicator: 30;
+	--layer-overlays-user-scribble: 40;
+	--layer-overlays-user-brush: 50;
+	--layer-overlays-user-indicator-selected: 60;
+	--layer-overlays-user-indicator-hovered: 70;
+	--layer-overlays-user-snapline: 90;
+	--layer-overlays-selection-fg: 100;
+	/* User handles need to be above selection edges / corners, matters for sticky note clone handles */
+	--layer-overlays-user-handles: 105;
+	--layer-overlays-user-indicator-hint: 110;
+	--layer-overlays-collaborator-cursor-hint: 120;
+	--layer-overlays-collaborator-cursor: 130;
+
+	/* Text editor z-index */
+	--layer-text-container: 1;
+	--layer-text-content: 3;
+	--layer-text-editor: 4;
+
+	/* Error fallback z-index */
+	--layer-error-overlay: 1;
+	--layer-error-canvas: 2;
+	--layer-error-canvas-after: 3;
+	--layer-error-content: 4;
+
 	/* Misc */
 	--tl-zoom: 1;
 
@@ -81,19 +111,21 @@
 	--tl-font-sans: 'tldraw_sans', sans-serif;
 	--tl-font-serif: 'tldraw_serif', serif;
 	--tl-font-mono: 'tldraw_mono', monospace;
-	/* fext outline */
+	/* text outline */
 	--a: calc(min(0.5, 1 / var(--tl-zoom)) * 2px);
 	--b: calc(min(0.5, 1 / var(--tl-zoom)) * -2px);
-	--tl-text-outline: 0 var(--b) 0 var(--color-background), 0 var(--a) 0 var(--color-background),
-		var(--b) var(--b) 0 var(--color-background), var(--a) var(--b) 0 var(--color-background),
-		var(--a) var(--a) 0 var(--color-background), var(--b) var(--a) 0 var(--color-background);
+	--tl-text-outline-reference: 0 var(--b) 0 var(--color-background),
+		0 var(--a) 0 var(--color-background), var(--b) var(--b) 0 var(--color-background),
+		var(--a) var(--b) 0 var(--color-background), var(--a) var(--a) 0 var(--color-background),
+		var(--b) var(--a) 0 var(--color-background);
+	--tl-text-outline: var(--tl-text-outline-reference);
 	/* own properties */
 	position: relative;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
+	width: 100%;
 	overflow: clip;
+	color: var(--color-text);
 }
 
 .tl-theme__light {
@@ -125,6 +157,10 @@
 	--color-text-3: hsl(220, 2%, 65%);
 	--color-text-shadow: hsl(0, 0%, 100%);
 	--color-primary: hsl(214, 84%, 56%);
+	--color-success: hsl(123, 46%, 34%);
+	--color-info: hsl(201, 98%, 41%);
+	--color-warning: hsl(27, 98%, 47%);
+	--color-error: hsl(0, 65%, 51%);
 	--color-warn: hsl(0, 90%, 43%);
 	--color-text: hsl(0, 0%, 0%);
 	--color-laser: hsl(0, 100%, 50%);
@@ -140,11 +176,11 @@
 
 .tl-theme__dark {
 	--color-accent: hsl(0, 76%, 60%);
-	--color-background: hsl(240, 5%, 8%);
+	--color-background: hsl(240, 5%, 6.5%);
 	--color-brush-fill: hsl(0, 0%, 71%, 5.1%);
 	--color-brush-stroke: hsl(0, 0%, 71%, 25.1%);
-	--color-grid: hsl(0, 0%, 56%);
-	--color-low: hsl(260, 5%, 12.5%);
+	--color-grid: hsl(0, 0%, 40%);
+	--color-low: hsl(260, 4.5%, 10.5%);
 	--color-low-border: hsl(207, 10%, 10%);
 	--color-culled: hsl(210, 11%, 19%);
 	--color-muted-none: hsl(0, 0%, 100%, 0%);
@@ -153,10 +189,10 @@
 	--color-muted-2: hsl(0, 0%, 100%, 5%);
 	--color-hint: hsl(0, 0%, 100%, 7%);
 	--color-overlay: hsl(0, 0%, 0%, 50%);
-	--color-divider: hsl(240, 9%, 25%);
-	--color-panel-contrast: hsl(240, 13%, 22%);
-	--color-panel: hsl(220, 8%, 15%);
-	--color-panel-overlay: hsl(210, 11%, 24%, 82%);
+	--color-divider: hsl(240, 9%, 22%);
+	--color-panel-contrast: hsl(245, 12%, 23%);
+	--color-panel: hsl(235, 6.8%, 13.5%);
+	--color-panel-overlay: hsl(210, 10%, 24%, 82%);
 	--color-focus: hsl(217, 76%, 80%);
 	--color-selected: hsl(217, 89%, 61%);
 	--color-selected-contrast: hsl(0, 0%, 100%);
@@ -167,6 +203,10 @@
 	--color-text-3: hsl(210, 6%, 45%);
 	--color-text-shadow: hsl(210, 13%, 18%);
 	--color-primary: hsl(214, 84%, 56%);
+	--color-success: hsl(123, 38%, 57%);
+	--color-info: hsl(199, 92%, 56%);
+	--color-warning: hsl(36, 100%, 57%);
+	--color-error: hsl(4, 90%, 58%);
 	--color-warn: hsl(0, 81%, 66%);
 	--color-text: hsl(210, 17%, 98%);
 	--color-laser: hsl(0, 100%, 50%);
@@ -201,7 +241,7 @@
 	-webkit-touch-callout: initial;
 }
 
-.tl-container:focus-within {
+.tl-container__focused {
 	outline: 1px solid var(--color-low);
 }
 
@@ -217,12 +257,10 @@ input,
 
 .tl-canvas {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
+	width: 100%;
 	color: var(--color-text);
-	z-index: var(--layer-canvas);
 	cursor: var(--tl-cursor);
 	overflow: clip;
 	content-visibility: auto;
@@ -230,24 +268,20 @@ input,
 	contain: strict;
 }
 
-.tl-fixed-layer {
-	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
-	height: 100%;
-	contain: strict;
-	pointer-events: none;
-}
-
 .tl-shapes {
 	position: relative;
-	z-index: var(--layer-shapes);
+	z-index: var(--layer-canvas-shapes);
 }
 
 .tl-overlays {
-	position: relative;
-	z-index: var(--layer-overlays);
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	height: 100%;
+	width: 100%;
+	contain: strict;
+	pointer-events: none;
+	z-index: var(--layer-canvas-overlays);
 }
 
 .tl-overlays__item {
@@ -263,36 +297,37 @@ input,
 	position: absolute;
 	top: 0px;
 	left: 0px;
+	width: 100%;
+	height: 100%;
 	pointer-events: none;
-}
-
-.tl-positioned {
-	position: absolute;
-	top: 0px;
-	left: 0px;
-	transform-origin: top left;
 }
 
 /* ------------------- Background ------------------- */
 
-.tl-background {
+.tl-background__wrapper {
+	z-index: var(--layer-canvas-background);
 	position: absolute;
-	background-color: var(--color-background);
 	inset: 0px;
-	z-index: var(--layer-background);
+	height: 100%;
+	width: 100%;
+}
+
+.tl-background {
+	background-color: var(--color-background);
+	width: 100%;
+	height: 100%;
 }
 
 /* --------------------- Grid Layer --------------------- */
 
 .tl-grid {
 	position: absolute;
-	top: 0px;
-	left: 0px;
+	inset: 0px;
 	width: 100%;
 	height: 100%;
 	touch-action: none;
 	pointer-events: none;
-	z-index: var(--layer-grid);
+	z-index: var(--layer-canvas-grid);
 	contain: strict;
 }
 
@@ -342,19 +377,13 @@ input,
 	contain: size layout;
 }
 
-.tl-shape__culled {
-	position: relative;
-	background-color: var(--color-culled);
-}
-
 /* ---------------- Shape Containers ---------------- */
 
 .tl-svg-container {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
+	width: 100%;
 	pointer-events: none;
 	stroke-linecap: round;
 	stroke-linejoin: round;
@@ -364,10 +393,9 @@ input,
 
 .tl-html-container {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
+	width: 100%;
 	pointer-events: none;
 	stroke-linecap: round;
 	stroke-linejoin: round;
@@ -380,58 +408,58 @@ input,
 
 /* back of the stack, behind user's stuff */
 .tl-collaborator__scribble {
-	z-index: 10;
+	z-index: var(--layer-overlays-collaborator-scribble);
 }
 
 .tl-collaborator__brush {
-	z-index: 20;
+	z-index: var(--layer-overlays-collaborator-brush);
 }
 
 .tl-collaborator__shape-indicator {
-	z-index: 30;
+	z-index: var(--layer-overlays-collaborator-shape-indicator);
 }
 
 .tl-user-scribble {
-	z-index: 40;
+	z-index: var(--layer-overlays-user-scribble);
 }
 
 .tl-user-brush {
-	z-index: 50;
+	z-index: var(--layer-overlays-user-brush);
 }
 
 .tl-user-indicator__selected {
-	z-index: 60;
+	z-index: var(--layer-overlays-user-indicator-selected);
 }
 
 .tl-user-indicator__hovered {
-	z-index: 70;
+	z-index: var(--layer-overlays-user-indicator-hovered);
 }
 
 .tl-user-handles {
-	z-index: 80;
+	z-index: var(--layer-overlays-user-handles);
 }
 
 .tl-user-snapline {
-	z-index: 90;
+	z-index: var(--layer-overlays-user-snapline);
 }
 
 .tl-selection__fg {
 	pointer-events: none;
-	z-index: 100;
+	z-index: var(--layer-overlays-selection-fg);
 }
 
 .tl-user-indicator__hint {
-	z-index: 110;
+	z-index: var(--layer-overlays-user-indicator-hint);
 	stroke-width: calc(2.5px * var(--tl-scale));
 }
 
 /* behind collaborator cursor */
 .tl-collaborator__cursor-hint {
-	z-index: 120;
+	z-index: var(--layer-overlays-collaborator-cursor-hint);
 }
 
 .tl-collaborator__cursor {
-	z-index: 130;
+	z-index: var(--layer-overlays-collaborator-cursor);
 }
 
 .tl-cursor {
@@ -444,7 +472,7 @@ input,
 	transform-origin: top left;
 	fill: none;
 	stroke-width: calc(1.5px * var(--tl-scale));
-	contain: size;
+	contain: size layout;
 }
 
 /* ------------------ SelectionBox ------------------ */
@@ -528,17 +556,14 @@ input,
 .tl-handle__create {
 	opacity: 0;
 }
-.tl-handle__create:hover {
-	opacity: 1;
+
+.tl-handle__clone > .tl-handle__fg {
+	fill: var(--color-selection-stroke);
+	stroke: none;
 }
 
 .tl-handle__bg:active {
 	fill: none;
-}
-
-.tl-handle__bg:hover {
-	cursor: var(--tl-cursor-grab);
-	fill: var(--color-selection-fill);
 }
 
 @media (pointer: coarse) {
@@ -561,6 +586,12 @@ input,
 	height: 100%;
 }
 
+.tl-video.tl-video-is-fullscreen {
+	object-fit: contain;
+	background-size: contain;
+}
+
+.tl-video-container,
 .tl-image-container,
 .tl-embed-container {
 	width: 100%;
@@ -571,6 +602,15 @@ input,
 	display: flex;
 	justify-content: center;
 	align-items: center;
+}
+
+.tl-image-container {
+	position: relative;
+	overflow: hidden;
+}
+.tl-image {
+	position: absolute;
+	inset: 0;
 }
 
 .tl-image__tg {
@@ -694,14 +734,15 @@ input,
 
 /* ------------------- Text Shape ------------------- */
 
-.tl-text-shape__wrapper {
+.tl-text-shape-label {
 	position: relative;
 	font-weight: normal;
 	min-width: 1px;
 	padding: 0px;
 	margin: 0px;
 	border: none;
-	height: 100%;
+	width: fit-content;
+	height: fit-content;
 	font-variant: normal;
 	font-style: normal;
 	pointer-events: all;
@@ -710,35 +751,38 @@ input,
 	text-shadow: var(--tl-text-outline);
 }
 
-.tl-text-shape__wrapper[data-align='start'] {
-	text-align: left;
-}
-
-.tl-text-shape__wrapper[data-align='middle'] {
-	text-align: center;
-}
-
-.tl-text-shape__wrapper[data-align='end'] {
-	text-align: right;
-}
-
-.tl-text-shape__wrapper[data-font='draw'] {
+.tl-text-wrapper[data-font='draw'] {
 	font-family: var(--tl-font-draw);
 }
 
-.tl-text-shape__wrapper[data-font='sans'] {
+.tl-text-wrapper[data-font='sans'] {
 	font-family: var(--tl-font-sans);
 }
 
-.tl-text-shape__wrapper[data-font='serif'] {
+.tl-text-wrapper[data-font='serif'] {
 	font-family: var(--tl-font-serif);
 }
 
-.tl-text-shape__wrapper[data-font='mono'] {
+.tl-text-wrapper[data-font='mono'] {
 	font-family: var(--tl-font-mono);
 }
 
-.tl-text-shape__wrapper[data-isediting='true'] .tl-text-content {
+.tl-text-wrapper[data-align='start'],
+.tl-text-wrapper[data-align='start-legacy'] {
+	text-align: left;
+}
+
+.tl-text-wrapper[data-align='middle'],
+.tl-text-wrapper[data-align='middle-legacy'] {
+	text-align: center;
+}
+
+.tl-text-wrapper[data-align='end'],
+.tl-text-wrapper[data-align='end-legacy'] {
+	text-align: right;
+}
+
+.tl-text-wrapper[data-isediting='true'] .tl-text-content {
 	opacity: 0;
 }
 
@@ -746,45 +790,50 @@ input,
 	/* remove overflow from textarea on windows */
 	margin: 0px;
 	padding: 0px;
-	border: 0px;
-	color: inherit;
-	caret-color: var(--color-text);
+
+	appearance: auto;
 	background: none;
 	border-image: none;
-	font-size: inherit;
-	font-family: inherit;
-	font-weight: inherit;
-	line-height: inherit;
-	font-variant: inherit;
-	font-style: inherit;
-	text-align: inherit;
-	letter-spacing: inherit;
-	text-shadow: inherit;
-	outline: none;
-	white-space: pre-wrap;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	pointer-events: all;
-	text-rendering: auto;
-	text-transform: none;
-	text-indent: 0px;
-	display: inline-block;
-	appearance: auto;
+	border: 0px;
+	caret-color: var(--color-text);
+	color: inherit;
 	column-count: initial !important;
-	writing-mode: horizontal-tb !important;
+	display: inline-block;
+	font-family: inherit;
+	font-feature-settings: normal;
+	font-kerning: auto;
+	font-optical-sizing: auto;
+	font-size: inherit;
+	font-stretch: 100%;
+	font-style: inherit;
+	font-variant: inherit;
+	font-variation-settings: normal;
+	font-weight: inherit;
+	letter-spacing: inherit;
+	line-height: inherit;
+	outline: none;
+	overflow-wrap: break-word;
+	text-align: inherit;
+	text-indent: 0px;
+	text-rendering: auto;
+	text-shadow: inherit;
+	text-transform: none;
+	white-space: pre-wrap;
+	line-break: normal;
 	word-spacing: 0px;
+	word-wrap: break-word;
+	writing-mode: horizontal-tb !important;
 }
 
 .tl-text-measure {
 	position: absolute;
-	z-index: -999999;
+	z-index: var(--layer-canvas-hidden);
 	top: 0px;
 	left: 0px;
 	opacity: 0;
 	width: max-content;
 	box-sizing: border-box;
 	pointer-events: none;
-	line-break: normal;
 	white-space: pre-wrap;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
@@ -798,14 +847,24 @@ input,
 .tl-text-input,
 .tl-text-content {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
+	width: 100%;
 	min-width: 1px;
 	min-height: 1px;
 	overflow: visible;
 	outline: none;
+}
+
+.tl-text-content__wrapper {
+	position: relative;
+	width: fit-content;
+	height: fit-content;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	min-height: auto;
 }
 
 .tl-text-content {
@@ -820,6 +879,12 @@ input,
 	cursor: var(--tl-cursor-text);
 }
 
+.tl-text-wrapper[data-isediting='false'] .tl-text-input,
+.tl-arrow-label[data-isediting='false'] .tl-text-input {
+	opacity: 0;
+	cursor: var(--tl-cursor-default);
+}
+
 .tl-text-input::selection {
 	background: var(--color-selected);
 	color: var(--color-selected-contrast);
@@ -828,7 +893,7 @@ input,
 
 /* ------------------- Snap Lines ------------------- */
 
-.tl-snap-line {
+.tl-snap-indicator {
 	stroke: var(--color-accent);
 	stroke-width: calc(1px * var(--tl-scale));
 	fill: none;
@@ -862,8 +927,12 @@ input,
 	overflow: hidden;
 }
 
+.tl-bookmark__container--safariExport {
+	border: 1px solid var(--color-divider);
+}
+
 .tl-bookmark__image_container {
-	flex: 1;
+	flex: 1 1 100%;
 	overflow: hidden;
 	border-top-left-radius: var(--radius-1);
 	border-top-right-radius: var(--radius-1);
@@ -890,12 +959,17 @@ input,
 	height: 100%;
 	object-fit: cover;
 	object-position: center;
+	border-bottom: 1px solid var(--color-muted-2);
 }
 
 .tl-bookmark__copy_container {
 	background-color: var(--color-muted);
 	padding: var(--space-4);
 	pointer-events: all;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	flex: 1;
 }
 
 .tl-bookmark__heading,
@@ -908,31 +982,64 @@ input,
 
 .tl-bookmark__heading {
 	font-size: 16px;
+	line-height: 1.5;
 	font-weight: bold;
 	padding-bottom: var(--space-2);
-	margin: 8px 0px;
+	overflow: hidden;
+	max-height: calc((16px * 1.5) * 2);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	line-clamp: 2;
+	text-overflow: ellipsis;
+	display: -webkit-box;
 }
 
 .tl-bookmark__description {
 	font-size: 12px;
-	padding-bottom: var(--space-4);
-}
-
-.tl-bookmark__link {
-	font-size: 14px;
-	pointer-events: all;
-	z-index: 999;
+	line-height: 1.5;
 	overflow: hidden;
-	display: block;
-	color: var(--color-text);
+	max-height: calc((12px * 1.5) * 3);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	line-clamp: 3;
 	text-overflow: ellipsis;
-	text-decoration: none;
-	color: var(--color-text-1);
-	cursor: var(--tl-cursor-pointer);
+	display: -webkit-box;
+	color: var(--color-text-2);
+	margin: var(--space-2) 0px;
 }
 
-.tl-bookmark__link:hover {
-	color: var(--color-selected);
+.tl-bookmark__heading + .tl-bookmark__link,
+.tl-bookmark__description + .tl-bookmark__link {
+	margin-top: var(--space-3);
+}
+.tl-bookmark__link {
+	font-size: 12px;
+	pointer-events: all;
+	display: flex;
+	color: var(--color-text-2);
+	align-items: center;
+	cursor: var(--tl-cursor-pointer);
+	width: fit-content;
+	max-width: 100%;
+}
+
+.tl-bookmark__link > span {
+	flex-shrink: 0px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tl-bookmark__link > .tl-hyperlink__icon {
+	margin-right: 8px;
+	flex-shrink: 0;
+}
+
+.tl-bookmark__link > .tl-bookmark__favicon {
+	margin-right: 8px;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
 }
 
 /* ---------------- Hyperlink Button ---------------- */
@@ -948,7 +1055,6 @@ input,
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	z-index: 200;
 	font-size: 12px;
 	font-weight: 400;
 	color: var(--color-text-1);
@@ -957,6 +1063,7 @@ input,
 	border: none;
 	outline: none;
 	pointer-events: all;
+	z-index: 1;
 }
 
 .tl-hyperlink-button::after {
@@ -973,17 +1080,13 @@ input,
 	pointer-events: none;
 }
 
-.tl-hyperlink-button:hover {
-	color: var(--color-selected);
-}
-
 .tl-hyperlink-button:focus-visible {
 	color: var(--color-selected);
 }
 
-.tl-hyperlink-button__icon {
-	width: 18px;
-	height: 18px;
+.tl-hyperlink__icon {
+	width: 16px;
+	height: 16px;
 	background-color: currentColor;
 	pointer-events: none;
 }
@@ -1003,11 +1106,8 @@ input,
 	line-height: inherit;
 	position: absolute;
 	inset: 0px;
-	z-index: 10;
-}
-
-.tl-text-label[data-isediting='true'] .tl-text-content {
-	opacity: 0;
+	height: 100%;
+	width: 100%;
 }
 
 .tl-text-label[data-hastext='false'][data-isediting='false'] > .tl-text-label__inner {
@@ -1019,37 +1119,51 @@ input,
 	pointer-events: all;
 }
 
-.tl-text-label__inner {
-	position: relative;
-	width: fit-content;
-	height: fit-content;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	pointer-events: none;
-	min-height: auto;
+.tl-text-wrapper .tl-text-content {
+	pointer-events: all;
+	z-index: var(--layer-text-content);
 }
 
-.tl-text-label__inner > .tl-text {
+.tl-text-label__inner > .tl-text-content {
 	position: relative;
 	top: 0px;
 	left: 0px;
-	padding: 16px;
+	padding: inherit;
 	height: fit-content;
 	width: fit-content;
 	border-radius: var(--radius-1);
 	max-width: 100%;
-	z-index: 3;
 }
 
 .tl-text-label__inner > .tl-text-input {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	width: 100%;
+	inset: 0px;
 	height: 100%;
-	padding: 16px;
-	z-index: 4;
+	width: 100%;
+	padding: inherit;
+}
+
+.tl-text-wrapper[data-isselected='true'] .tl-text-input {
+	z-index: var(--layer-text-editor);
+	pointer-events: all;
+}
+
+/* This part of the rule helps preserve the occlusion rules for the shapes so we
+ * don't click on shapes that are behind other shapes.
+ * One extra nuance is we don't use this behavior for:
+ *  - arrows which have weird geometry and just gets in the way.
+ *  - draw/line shapes, because it feels restrictive to have them be 'in the way' of clicking on a textfield
+ *  - shapes that are not filled
+ */
+.tl-canvas:is([data-iseditinganything='true'], [data-isselectinganything='true'])
+	.tl-shape:not(
+		[data-shape-type='arrow'],
+		[data-shape-type='draw'],
+		[data-shape-type='line'],
+		[data-shape-type='highlight'],
+		[data-shape-is-filled='false']
+	) {
+	pointer-events: all;
 }
 
 .tl-text-label[data-textwrap='true'] > .tl-text-label__inner {
@@ -1065,46 +1179,11 @@ input,
 	opacity: 0;
 }
 
-.tl-text-label[data-align='start'],
-.tl-text-label[data-align='start-legacy'] {
-	text-align: left;
-}
-
-.tl-text-label[data-align='middle'],
-.tl-text-label[data-align='middle-legacy'] {
-	text-align: center;
-}
-
-.tl-text-label[data-align='end'],
-.tl-text-label[data-align='end-legacy'] {
-	text-align: right;
-}
-
 .tl-arrow-hint {
 	stroke: var(--color-text-1);
 	fill: none;
 	stroke-linecap: round;
 	overflow: visible;
-}
-
-.tl-arrow-label[data-font='draw'],
-.tl-text-label[data-font='draw'] {
-	font-family: var(--tl-font-draw);
-}
-
-.tl-arrow-label[data-font='sans'],
-.tl-text-label[data-font='sans'] {
-	font-family: var(--tl-font-sans);
-}
-
-.tl-arrow-label[data-font='serif'],
-.tl-text-label[data-font='serif'] {
-	font-family: var(--tl-font-serif);
-}
-
-.tl-arrow-label[data-font='mono'],
-.tl-text-label[data-font='mono'] {
-	font-family: var(--tl-font-mono);
 }
 
 /* ------------------- Arrow Shape ------------------ */
@@ -1119,6 +1198,7 @@ input,
 	display: flex;
 	justify-content: center;
 	align-items: center;
+	text-align: center;
 	color: var(--color-text);
 	text-shadow: var(--tl-text-outline);
 }
@@ -1137,70 +1217,21 @@ input,
 	position: relative;
 	height: max-content;
 	width: max-content;
-	pointer-events: all;
+	pointer-events: none;
 	display: flex;
 	justify-content: center;
 	align-items: center;
 }
 
-.tl-arrow-label__inner p {
-	cursor: var(--tl-cursor-grab);
-}
-
-.tl-arrow-label p,
-.tl-arrow-label textarea {
-	margin: 0px;
-	padding: 0px;
-	border: 0px;
-	color: inherit;
-	caret-color: var(--color-text);
-	background: none;
-	border-image: none;
-	font-size: inherit;
-	font-family: inherit;
-	font-weight: inherit;
-	line-height: inherit;
-	font-variant: inherit;
-	font-style: inherit;
-	text-align: inherit;
-	letter-spacing: inherit;
-	text-shadow: inherit;
-	outline: none;
-	white-space: pre-wrap;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	pointer-events: all;
-	text-rendering: auto;
-	text-transform: none;
-	text-indent: 0px;
-	display: inline-block;
-	appearance: auto;
-	column-count: initial !important;
-	writing-mode: horizontal-tb !important;
-	word-spacing: 0px;
-}
-
-.tl-arrow-label p {
+.tl-arrow-label .tl-arrow {
 	position: relative;
 	height: max-content;
-	z-index: 2;
-	padding: 4px;
+	padding: inherit;
 	overflow: visible;
 }
 
 .tl-arrow-label textarea {
-	z-index: 3;
-	margin: 0px;
-	padding: 4px;
-	height: 100%;
-	width: 100%;
-	position: absolute;
-	resize: none;
-	border: 0px;
-	user-select: all;
-	-webkit-user-select: text;
-	caret-color: var(--color-text);
-	border-image: none;
+	padding: inherit;
 	/* Don't allow textarea to be zero width */
 	min-width: 4px;
 }
@@ -1211,28 +1242,18 @@ input,
 	position: relative;
 	width: 100%;
 	height: 100%;
-	border-radius: var(--radius-2);
-	box-shadow: var(--shadow-1);
-	overflow: hidden;
-	border-color: currentColor;
-	border-style: solid;
-	border-width: 1px;
+	pointer-events: all;
+	opacity: 1;
+	z-index: var(--layer-text-container);
+	border-radius: 1px;
 }
 
-.tl-note__container .tl-text-label {
+.tl-note__container > .tl-text-label {
 	text-shadow: none;
+	color: currentColor;
 }
 
-.tl-note__scrim {
-	position: absolute;
-	z-index: 1;
-	top: 0px;
-	left: 0px;
-	width: 100%;
-	height: 100%;
-	background-color: var(--color-background);
-	opacity: 0.28;
-}
+/* --------------------- Loading -------------------- */
 
 .tl-loading {
 	background-color: var(--color-background);
@@ -1320,13 +1341,13 @@ input,
 
 .tl-frame-name-input {
 	position: absolute;
-	top: 0px;
-	left: 0px;
 	border: none;
 	background: none;
 	outline: none;
 	padding: var(--space-3) var(--space-3);
 	inset: 0px;
+	height: 100%;
+	width: 100%;
 	font-size: inherit;
 	font-family: inherit;
 	font-weight: inherit;
@@ -1396,13 +1417,14 @@ input,
 	background-color: var(--color-background);
 	color: var(--color-text-1);
 	position: absolute;
-	z-index: 600;
 }
 
 .tl-error-boundary__overlay {
 	position: absolute;
 	inset: 0px;
-	z-index: 500;
+	height: 100%;
+	width: 100%;
+	z-index: var(--layer-error-overlay);
 	background-color: var(--color-overlay);
 }
 
@@ -1416,8 +1438,11 @@ input,
 	pointer-events: none;
 	position: absolute;
 	inset: 0px;
-	z-index: -1;
+	height: 100%;
+	width: 100%;
+	z-index: var(--layer-error-canvas);
 }
+
 /* some browsers seem to have some weird interactions between stacking contexts
 and pointer-events. this ::after pseudo element covers the canvas and prevents
 it from receiving any pointer events or affecting the cursor. */
@@ -1426,7 +1451,9 @@ it from receiving any pointer events or affecting the cursor. */
 	display: block;
 	position: absolute;
 	inset: 0px;
-	z-index: 600;
+	height: 100%;
+	width: 100%;
+	z-index: var(--layer-error-canvas-after);
 	pointer-events: all;
 }
 
@@ -1445,7 +1472,7 @@ it from receiving any pointer events or affecting the cursor. */
 	display: flex;
 	flex-direction: column;
 	overflow: auto;
-	z-index: 600;
+	z-index: var(--layer-error-content);
 	gap: 12px;
 }
 
@@ -1459,6 +1486,14 @@ it from receiving any pointer events or affecting the cursor. */
 	font-weight: 500;
 }
 
+.tl-error-boundary__content h4 {
+	border: 1px solid var(--color-low-border);
+	margin: -6px 0 0 0;
+	padding: var(--space-5);
+	border-radius: var(--radius-2);
+	font-weight: normal;
+}
+
 .tl-error-boundary__content p {
 	line-height: 1.5;
 	margin: 0px;
@@ -1466,6 +1501,7 @@ it from receiving any pointer events or affecting the cursor. */
 
 .tl-error-boundary__content pre {
 	background-color: var(--color-muted-2);
+	margin-top: 0;
 	padding: var(--space-5);
 	border-radius: var(--radius-2);
 	overflow: auto;
@@ -1485,22 +1521,18 @@ it from receiving any pointer events or affecting the cursor. */
 	color: inherit;
 	background-color: transparent;
 }
-.tl-error-boundary__content button:hover {
-	background-color: var(--color-low);
-}
 
 .tl-error-boundary__content a {
-	color: var(--color-text-1);
+	color: var(--color-selected);
 	font-weight: 500;
 	text-decoration: none;
-}
-.tl-error-boundary__content a:hover {
-	color: var(--color-text-1);
 }
 
 .tl-error-boundary__content__error {
 	position: relative;
+	margin: -6px 0 0 0;
 }
+
 .tl-error-boundary__content__error button {
 	position: absolute;
 	top: var(--space-2);
@@ -1529,11 +1561,6 @@ it from receiving any pointer events or affecting the cursor. */
 	background-color: var(--color-primary);
 	color: var(--color-selected-contrast);
 }
-.tl-error-boundary__content .tl-error-boundary__refresh:hover {
-	background-color: var(--color-primary);
-	opacity: 0.9;
-}
-
 /* --------------------- Coarse --------------------- */
 
 .tl-hidden {
@@ -1548,4 +1575,56 @@ it from receiving any pointer events or affecting the cursor. */
 	color: #555;
 	font-size: 12px;
 	font-family: monospace;
+}
+
+/* ---------------- Hit test blocker ---------------- */
+
+.tl-hit-test-blocker {
+	position: absolute;
+	z-index: var(--layer-canvas-blocker);
+	inset: 0px;
+	width: 100%;
+	height: 100%;
+	pointer-events: all;
+}
+
+.tl-hit-test-blocker__hidden {
+	display: none;
+}
+
+@media (hover: hover) {
+	.tl-handle__create:hover {
+		opacity: 1;
+	}
+
+	.tl-handle__bg:hover {
+		cursor: var(--tl-cursor-grab);
+		fill: var(--color-selection-fill);
+	}
+
+	.tl-bookmark__link:hover {
+		color: var(--color-selected);
+	}
+
+	.tl-hyperlink-button:hover {
+		color: var(--color-selected);
+	}
+
+	.tl-error-boundary__content button:hover {
+		background-color: var(--color-low);
+	}
+	.tl-error-boundary__content a:hover {
+		color: var(--color-text-1);
+	}
+	.tl-error-boundary__content .tl-error-boundary__refresh:hover {
+		background-color: var(--color-primary);
+		opacity: 0.9;
+	}
+
+	/* These three rules help preserve clicking into specific points in text areas *while*
+ * already in edit mode when jumping from shape to shape. */
+	.tl-canvas[data-iseditinganything='true'] .tl-text-wrapper:hover .tl-text-input {
+		z-index: var(--layer-text-editor);
+		pointer-events: all;
+	}
 }

@@ -1,17 +1,15 @@
 import classNames from 'classnames'
-import { useRef } from 'react'
 import { useTranslation } from '../../hooks/useTranslation/useTranslation'
-import { Icon } from '../primitives/Icon'
+import { TldrawUiIcon } from '../primitives/TldrawUiIcon'
 
-/** @public */
+/** @public @react */
 export function OfflineIndicator() {
 	const msg = useTranslation()
-	const rContainer = useRef<HTMLDivElement>(null)
 
 	return (
-		<div className={classNames('tlui-offline-indicator')} ref={rContainer}>
+		<div className={classNames('tlui-offline-indicator')}>
 			{msg('status.offline')}
-			<Icon aria-label="offline" icon="status-offline" small />
+			<TldrawUiIcon aria-label="offline" icon="status-offline" small />
 		</div>
 	)
 }

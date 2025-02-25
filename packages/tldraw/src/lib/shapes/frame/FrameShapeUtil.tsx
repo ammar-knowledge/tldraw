@@ -1,28 +1,37 @@
 import {
 	BaseBoxShapeUtil,
 	Geometry2d,
+	Group2d,
 	Rectangle2d,
 	SVGContainer,
-	SelectionEdge,
+	SvgExportContext,
 	TLFrameShape,
+	TLFrameShapeProps,
 	TLGroupShape,
-	TLOnResizeEndHandler,
-	TLOnResizeHandler,
+	TLResizeInfo,
 	TLShape,
-	TLShapeId,
-	canonicalizeRotation,
 	frameShapeMigrations,
 	frameShapeProps,
 	getDefaultColorTheme,
-	last,
+	lerp,
 	resizeBox,
 	toDomPrecision,
 	useValue,
 } from '@tldraw/editor'
 import classNames from 'classnames'
-import { useDefaultColorTheme } from '../shared/ShapeFill'
-import { createTextSvgElementFromSpans } from '../shared/createTextSvgElementFromSpans'
+
+import {
+	TLCreateTextJsxFromSpansOpts,
+	createTextJsxFromSpans,
+} from '../shared/createTextJsxFromSpans'
+import { useDefaultColorTheme } from '../shared/useDefaultColorTheme'
 import { FrameHeading } from './components/FrameHeading'
+import {
+	getFrameHeadingOpts,
+	getFrameHeadingSide,
+	getFrameHeadingSize,
+	getFrameHeadingTranslation,
+} from './frameHelpers'
 
 export function defaultEmptyAs(str: string, dflt: string) {
 	if (str.match(/^\s*$/)) {
@@ -37,24 +46,83 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 	static override props = frameShapeProps
 	static override migrations = frameShapeMigrations
 
-	override canBind = () => true
-
-	override canEdit = () => true
+	override canEdit() {
+		return true
+	}
 
 	override getDefaultProps(): TLFrameShape['props'] {
 		return { w: 160 * 2, h: 90 * 2, name: '' }
 	}
 
 	override getGeometry(shape: TLFrameShape): Geometry2d {
-		return new Rectangle2d({
-			width: shape.props.w,
-			height: shape.props.h,
-			isFilled: false,
+		const { editor } = this
+		const z = editor.getZoomLevel()
+		const opts = getFrameHeadingOpts(shape, 'black')
+		const box = getFrameHeadingSize(editor, shape, opts)
+		const labelSide = getFrameHeadingSide(editor, shape)
+
+		// wow this fucking sucks!!!
+		let x: number, y: number, w: number, h: number
+
+		const { w: hw, h: hh } = box
+		const scaledW = Math.min(hw, shape.props.w * z)
+		const scaledH = Math.min(hh, shape.props.h * z)
+
+		switch (labelSide) {
+			case 0: {
+				x = -8 / z
+				y = (-hh - 4) / z
+				w = (scaledW + 16) / z
+				h = hh / z
+				break
+			}
+			case 1: {
+				x = (-hh - 4) / z
+				h = (scaledH + 16) / z
+				y = shape.props.h - h + 8 / z
+				w = hh / z
+				break
+			}
+			case 2: {
+				x = shape.props.w - (scaledW + 8) / z
+				y = shape.props.h + 4 / z
+				w = (scaledH + 16) / z
+				h = hh / z
+				break
+			}
+			case 3: {
+				x = shape.props.w + 4 / z
+				h = (scaledH + 16) / z
+				y = -8 / z
+				w = hh / z
+				break
+			}
+		}
+
+		return new Group2d({
+			children: [
+				new Rectangle2d({
+					width: shape.props.w,
+					height: shape.props.h,
+					isFilled: false,
+				}),
+				new Rectangle2d({
+					x,
+					y,
+					width: w,
+					height: h,
+					isFilled: true,
+					isLabel: true,
+				}),
+			],
 		})
 	}
 
+	override getText(shape: TLFrameShape): string | undefined {
+		return shape.props.name
+	}
+
 	override component(shape: TLFrameShape) {
-		const bounds = this.editor.getShapeGeometry(shape).bounds
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		const theme = useDefaultColorTheme()
 
@@ -68,7 +136,7 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 				const info = (resizingState as typeof resizingState & { info: { isCreating: boolean } })
 					?.info
 				if (!info) return false
-				return info.isCreating && this.editor.getOnlySelectedShape()?.id === shape.id
+				return info.isCreating && this.editor.getOnlySelectedShapeId() === shape.id
 			},
 			[shape.id]
 		)
@@ -78,8 +146,8 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 				<SVGContainer>
 					<rect
 						className={classNames('tl-frame__body', { 'tl-frame__creating': isCreating })}
-						width={bounds.width}
-						height={bounds.height}
+						width={shape.props.w}
+						height={shape.props.h}
 						fill={theme.solid}
 						stroke={theme.text}
 					/>
@@ -88,116 +156,67 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 					<FrameHeading
 						id={shape.id}
 						name={shape.props.name}
-						width={bounds.width}
-						height={bounds.height}
+						width={shape.props.w}
+						height={shape.props.h}
 					/>
 				)}
 			</>
 		)
 	}
 
-	override toSvg(shape: TLFrameShape): SVGElement | Promise<SVGElement> {
-		const theme = getDefaultColorTheme({ isDarkMode: this.editor.user.getIsDarkMode() })
-		const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+	override toSvg(shape: TLFrameShape, ctx: SvgExportContext) {
+		const theme = getDefaultColorTheme({ isDarkMode: ctx.isDarkMode })
 
-		const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-		rect.setAttribute('width', shape.props.w.toString())
-		rect.setAttribute('height', shape.props.h.toString())
-		rect.setAttribute('fill', theme.solid)
-		rect.setAttribute('stroke', theme.black.solid)
-		rect.setAttribute('stroke-width', '1')
-		rect.setAttribute('rx', '1')
-		rect.setAttribute('ry', '1')
-		g.appendChild(rect)
-
-		// Text label
-		const pageRotation = canonicalizeRotation(
-			this.editor.getShapePageTransform(shape.id)!.rotation()
-		)
 		// rotate right 45 deg
-		const offsetRotation = pageRotation + Math.PI / 4
-		const scaledRotation = (offsetRotation * (2 / Math.PI) + 4) % 4
-		const labelSide: SelectionEdge = (['top', 'left', 'bottom', 'right'] as const)[
-			Math.floor(scaledRotation)
-		]
-
-		let labelTranslate: string
-		switch (labelSide) {
-			case 'top':
-				labelTranslate = ``
-				break
-			case 'right':
-				labelTranslate = `translate(${toDomPrecision(shape.props.w)}px, 0px) rotate(90deg)`
-				break
-			case 'bottom':
-				labelTranslate = `translate(${toDomPrecision(shape.props.w)}px, ${toDomPrecision(
-					shape.props.h
-				)}px) rotate(180deg)`
-				break
-			case 'left':
-				labelTranslate = `translate(0px, ${toDomPrecision(shape.props.h)}px) rotate(270deg)`
-				break
-			default:
-				labelTranslate = ``
-		}
+		const labelSide = getFrameHeadingSide(this.editor, shape)
+		const labelTranslate = getFrameHeadingTranslation(shape, labelSide, true)
 
 		// Truncate with ellipsis
-		const opts = {
-			fontSize: 12,
-			fontFamily: 'Inter, sans-serif',
-			textAlign: 'start' as const,
-			width: shape.props.w,
-			height: 32,
-			padding: 0,
-			lineHeight: 1,
-			fontStyle: 'normal',
-			fontWeight: 'normal',
-			overflow: 'truncate-ellipsis' as const,
-			verticalTextAlign: 'middle' as const,
-		}
+		const opts: TLCreateTextJsxFromSpansOpts = getFrameHeadingOpts(shape, theme.text)
 
-		const spans = this.editor.textMeasure.measureTextSpans(
-			defaultEmptyAs(shape.props.name, 'Frame') + String.fromCharCode(8203),
-			opts
+		const frameTitle = defaultEmptyAs(shape.props.name, 'Frame') + String.fromCharCode(8203)
+		const labelBounds = getFrameHeadingSize(this.editor, shape, opts)
+		const spans = this.editor.textMeasure.measureTextSpans(frameTitle, opts)
+		const text = createTextJsxFromSpans(this.editor, spans, opts)
+
+		return (
+			<>
+				<rect
+					width={shape.props.w}
+					height={shape.props.h}
+					fill={theme.solid}
+					stroke={theme.black.solid}
+					strokeWidth={1}
+					rx={1}
+					ry={1}
+				/>
+				<g transform={labelTranslate}>
+					<rect
+						x={labelBounds.x - 8}
+						y={labelBounds.y - 4}
+						width={labelBounds.width + 20}
+						height={labelBounds.height}
+						fill={theme.background}
+						rx={4}
+						ry={4}
+					/>
+					{text}
+				</g>
+			</>
 		)
-
-		const firstSpan = spans[0]
-		const lastSpan = last(spans)!
-		const labelTextWidth = lastSpan.box.w + lastSpan.box.x - firstSpan.box.x
-		const text = createTextSvgElementFromSpans(this.editor, spans, {
-			offsetY: -opts.height - 2,
-			...opts,
-		})
-		text.style.setProperty('transform', labelTranslate)
-
-		const textBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-		textBg.setAttribute('x', '-8px')
-		textBg.setAttribute('y', -opts.height - 4 + 'px')
-		textBg.setAttribute('width', labelTextWidth + 16 + 'px')
-		textBg.setAttribute('height', `${opts.height}px`)
-		textBg.setAttribute('rx', 4 + 'px')
-		textBg.setAttribute('ry', 4 + 'px')
-		textBg.setAttribute('fill', theme.background)
-
-		g.appendChild(textBg)
-		g.appendChild(text)
-
-		return g
 	}
 
 	indicator(shape: TLFrameShape) {
-		const bounds = this.editor.getShapeGeometry(shape).bounds
-
 		return (
 			<rect
-				width={toDomPrecision(bounds.width)}
-				height={toDomPrecision(bounds.height)}
+				width={toDomPrecision(shape.props.w)}
+				height={toDomPrecision(shape.props.h)}
 				className={`tl-frame-indicator`}
 			/>
 		)
 	}
 
-	override canReceiveNewChildrenOfType = (shape: TLShape, _type: TLShape['type']) => {
+	override canReceiveNewChildrenOfType(shape: TLShape, _type: TLShape['type']) {
 		return !shape.isLocked
 	}
 
@@ -205,22 +224,17 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 		return true
 	}
 
-	override canDropShapes = (shape: TLFrameShape, _shapes: TLShape[]): boolean => {
+	override canDropShapes(shape: TLFrameShape, _shapes: TLShape[]): boolean {
 		return !shape.isLocked
 	}
 
-	override onDragShapesOver = (frame: TLFrameShape, shapes: TLShape[]): { shouldHint: boolean } => {
+	override onDragShapesOver(frame: TLFrameShape, shapes: TLShape[]) {
 		if (!shapes.every((child) => child.parentId === frame.id)) {
-			this.editor.reparentShapes(
-				shapes.map((shape) => shape.id),
-				frame.id
-			)
-			return { shouldHint: true }
+			this.editor.reparentShapes(shapes, frame.id)
 		}
-		return { shouldHint: false }
 	}
 
-	override onDragShapesOut = (_shape: TLFrameShape, shapes: TLShape[]): void => {
+	override onDragShapesOut(_shape: TLFrameShape, shapes: TLShape[]): void {
 		const parent = this.editor.getShape(_shape.parentId)
 		const isInGroup = parent && this.editor.isShapeOfType<TLGroupShape>(parent, 'group')
 
@@ -234,25 +248,18 @@ export class FrameShapeUtil extends BaseBoxShapeUtil<TLFrameShape> {
 		}
 	}
 
-	override onResizeEnd: TLOnResizeEndHandler<TLFrameShape> = (shape) => {
-		const bounds = this.editor.getShapePageBounds(shape)!
-		const children = this.editor.getSortedChildIdsForParent(shape.id)
-
-		const shapesToReparent: TLShapeId[] = []
-
-		for (const childId of children) {
-			const childBounds = this.editor.getShapePageBounds(childId)!
-			if (!bounds.includes(childBounds)) {
-				shapesToReparent.push(childId)
-			}
-		}
-
-		if (shapesToReparent.length > 0) {
-			this.editor.reparentShapes(shapesToReparent, this.editor.getCurrentPageId())
-		}
-	}
-
-	override onResize: TLOnResizeHandler<any> = (shape, info) => {
+	override onResize(shape: any, info: TLResizeInfo<any>) {
 		return resizeBox(shape, info)
+	}
+	override getInterpolatedProps(
+		startShape: TLFrameShape,
+		endShape: TLFrameShape,
+		t: number
+	): TLFrameShapeProps {
+		return {
+			...(t > 0.5 ? endShape.props : startShape.props),
+			w: lerp(startShape.props.w, endShape.props.w, t),
+			h: lerp(startShape.props.h, endShape.props.h, t),
+		}
 	}
 }

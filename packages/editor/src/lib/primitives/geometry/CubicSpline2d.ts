@@ -46,14 +46,8 @@ export class CubicSpline2d extends Geometry2d {
 		return this._segments
 	}
 
-	_length?: number
-
-	// eslint-disable-next-line no-restricted-syntax
-	get length() {
-		if (!this._length) {
-			this._length = this.segments.reduce((acc, segment) => acc + segment.length, 0)
-		}
-		return this._length
+	override getLength() {
+		return this.segments.reduce((acc, segment) => acc + segment.length, 0)
 	}
 
 	getVertices() {
@@ -67,20 +61,33 @@ export class CubicSpline2d extends Geometry2d {
 	nearestPoint(A: Vec): Vec {
 		let nearest: Vec | undefined
 		let dist = Infinity
+		let d: number
+		let p: Vec
 		for (const segment of this.segments) {
-			const p = segment.nearestPoint(A)
-			const d = p.dist(A)
+			p = segment.nearestPoint(A)
+			d = Vec.Dist2(p, A)
 			if (d < dist) {
 				nearest = p
 				dist = d
 			}
 		}
-
 		if (!nearest) throw Error('nearest point not found')
 		return nearest
 	}
 
-	hitTestLineSegment(A: Vec, B: Vec, zoom: number): boolean {
-		return this.segments.some((segment) => segment.hitTestLineSegment(A, B, zoom))
+	hitTestLineSegment(A: Vec, B: Vec): boolean {
+		return this.segments.some((segment) => segment.hitTestLineSegment(A, B))
+	}
+
+	getSvgPathData() {
+		let d = this.segments.reduce((d, segment, i) => {
+			return d + segment.getSvgPathData(i === 0)
+		}, '')
+
+		if (this.isClosed) {
+			d += 'Z'
+		}
+
+		return d
 	}
 }

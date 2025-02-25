@@ -1,5 +1,6 @@
 import { VecModel } from '@tldraw/tlschema'
 import { EASINGS } from './easings'
+import { toFixed } from './utils'
 
 /** @public */
 export type VecLike = Vec | VecModel
@@ -309,16 +310,23 @@ export class Vec {
 		return new Vec(A.y, -A.x)
 	}
 
-	static Dist2(A: VecLike, B: VecLike): number {
-		return Vec.Sub(A, B).len2()
-	}
-
 	static Abs(A: VecLike): Vec {
 		return new Vec(Math.abs(A.x), Math.abs(A.y))
 	}
 
+	// Get the distance between two points.
 	static Dist(A: VecLike, B: VecLike): number {
-		return Math.hypot(A.y - B.y, A.x - B.x)
+		return ((A.y - B.y) ** 2 + (A.x - B.x) ** 2) ** 0.5
+	}
+
+	// Get whether a distance between two points is less than a number. This is faster to calulate than using `Vec.Dist(a, b) < n`.
+	static DistMin(A: VecLike, B: VecLike, n: number): boolean {
+		return (A.x - B.x) * (A.x - B.x) + (A.y - B.y) * (A.y - B.y) < n ** 2
+	}
+
+	// Get the squared distance between two points. This is faster to calculate (no square root) so useful for "minimum distance" checks where the actual measurement does not matter.
+	static Dist2(A: VecLike, B: VecLike): number {
+		return (A.x - B.x) * (A.x - B.x) + (A.y - B.y) * (A.y - B.y)
 	}
 
 	/**
@@ -348,7 +356,7 @@ export class Vec {
 	}
 
 	static Len(A: VecLike): number {
-		return Math.hypot(A.x, A.y)
+		return (A.x * A.x + A.y * A.y) ** 0.5
 	}
 
 	/**
@@ -415,10 +423,11 @@ export class Vec {
 	}
 
 	static NearestPointOnLineSegment(A: VecLike, B: VecLike, P: VecLike, clamp = true): Vec {
+		if (Vec.Equals(A, P)) return Vec.From(P)
+		if (Vec.Equals(B, P)) return Vec.From(P)
+
 		const u = Vec.Tan(B, A)
 		const C = Vec.Add(A, Vec.Mul(u, Vec.Sub(P, A).pry(u)))
-
-		// todo: fix error P is B or A, which leads to a NaN value
 
 		if (clamp) {
 			if (C.x < Math.min(A.x, B.x)) return Vec.Cast(A.x < B.x ? A : B)
@@ -450,6 +459,10 @@ export class Vec {
 	static Slope(A: VecLike, B: VecLike): number {
 		if (A.x === B.y) return NaN
 		return (A.y - B.y) / (A.x - B.x)
+	}
+
+	static IsNaN(A: VecLike): boolean {
+		return isNaN(A.x) || isNaN(A.y)
 	}
 
 	static Angle(A: VecLike, B: VecLike): number {
@@ -492,8 +505,20 @@ export class Vec {
 		return Vec.Sub(A, origin).mul(scale).add(origin)
 	}
 
-	static ToFixed(A: VecLike, n = 2) {
-		return new Vec(+A.x.toFixed(n), +A.y.toFixed(n), +A.z!.toFixed(n))
+	static ToFixed(A: VecLike) {
+		return new Vec(toFixed(A.x), toFixed(A.y))
+	}
+
+	static ToInt(A: VecLike) {
+		return new Vec(
+			parseInt(A.x.toFixed(0)),
+			parseInt(A.y.toFixed(0)),
+			parseInt((A.z ?? 0).toFixed(0))
+		)
+	}
+
+	static ToCss(A: VecLike) {
+		return `${A.x},${A.y}`
 	}
 
 	static Nudge(A: VecLike, B: VecLike, distance: number) {
@@ -527,6 +552,9 @@ export class Vec {
 	static Average(arr: VecLike[]) {
 		const len = arr.length
 		const avg = new Vec(0, 0)
+		if (len === 0) {
+			return avg
+		}
 		for (let i = 0; i < len; i++) {
 			avg.add(arr[i])
 		}

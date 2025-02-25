@@ -1,19 +1,7 @@
-import {
-	Editor,
-	TLBaseShape,
-	TLImageShapeCrop,
-	TLShapePartial,
-	Vec,
-	deepCopy,
-} from '@tldraw/editor'
+import { Editor, ShapeWithCrop, TLShapePartial, Vec, structuredClone } from '@tldraw/editor'
+import { getUncroppedSize } from '../../../../../shapes/shared/crop'
 
-export type ShapeWithCrop = TLBaseShape<string, { w: number; h: number; crop: TLImageShapeCrop }>
-
-export function getTranslateCroppedImageChange(
-	editor: Editor,
-	shape: TLBaseShape<string, { w: number; h: number; crop: TLImageShapeCrop }>,
-	delta: Vec
-) {
+export function getTranslateCroppedImageChange(editor: Editor, shape: ShapeWithCrop, delta: Vec) {
 	if (!shape) {
 		throw Error('Needs to translate a cropped shape!')
 	}
@@ -38,13 +26,10 @@ export function getTranslateCroppedImageChange(
 
 	delta.rot(-shape.rotation)
 
-	// original (uncropped) width and height of shape
-	const w = (1 / (oldCrop.bottomRight.x - oldCrop.topLeft.x)) * shape.props.w
-	const h = (1 / (oldCrop.bottomRight.y - oldCrop.topLeft.y)) * shape.props.h
-
+	const { w, h } = getUncroppedSize(shape.props, oldCrop)
 	const yCrop = oldCrop.bottomRight.y - oldCrop.topLeft.y
 	const xCrop = oldCrop.bottomRight.x - oldCrop.topLeft.x
-	const newCrop = deepCopy(oldCrop)
+	const newCrop = structuredClone(oldCrop)
 
 	newCrop.topLeft.x = Math.min(1 - xCrop, Math.max(0, newCrop.topLeft.x - delta.x / w))
 	newCrop.topLeft.y = Math.min(1 - yCrop, Math.max(0, newCrop.topLeft.y - delta.y / h))

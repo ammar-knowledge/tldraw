@@ -1,17 +1,17 @@
+import React from 'react'
 import {
 	debounce,
 	parseAndLoadDocument,
 	serializeTldrawJson,
 	useDefaultHelpers,
 	useEditor,
-} from '@tldraw/tldraw'
-import React from 'react'
+} from 'tldraw'
 // @ts-ignore
 import type { VscodeMessage } from '../../messages'
 import '../public/index.css'
 import { vscode } from './utils/vscode'
 
-export const ChangeResponder = () => {
+export function ChangeResponder() {
 	const editor = useEditor()
 	const { addToast, clearToasts, msg } = useDefaultHelpers()
 
@@ -48,7 +48,7 @@ export const ChangeResponder = () => {
 			vscode.postMessage({
 				type: 'vscode:editor-updated',
 				data: {
-					fileContents: await serializeTldrawJson(editor.store),
+					fileContents: await serializeTldrawJson(editor),
 				},
 			})
 		}, 250)
@@ -57,11 +57,11 @@ export const ChangeResponder = () => {
 			type: 'vscode:editor-loaded',
 		})
 
-		editor.on('change-history', handleChange)
+		const dispose = editor.store.listen(handleChange, { scope: 'document' })
 
 		return () => {
 			handleChange()
-			editor.off('change-history', handleChange)
+			dispose()
 		}
 	}, [editor])
 

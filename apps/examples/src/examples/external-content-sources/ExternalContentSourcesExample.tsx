@@ -1,6 +1,13 @@
-import { BaseBoxShapeUtil, Editor, HTMLContainer, TLBaseShape, Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
 import { useCallback } from 'react'
+import {
+	BaseBoxShapeUtil,
+	defaultHandleExternalTextContent,
+	Editor,
+	HTMLContainer,
+	TLBaseShape,
+	Tldraw,
+} from 'tldraw'
+import 'tldraw/tldraw.css'
 
 // There's a guide at the bottom of this page!
 
@@ -47,11 +54,11 @@ export default function ExternalContentSourcesExample() {
 		// We will register a new handler for text content. When a user pastes `text/html` content into the editor,
 		// we will create a new shape with that html content.
 		// To test this copy some html content from VS Code or some other text editor.
-		editor.registerExternalContentHandler('text', async ({ point, sources }) => {
-			const htmlSource = sources?.find((s) => s.type === 'text' && s.subtype === 'html')
+		editor.registerExternalContentHandler('text', async (content) => {
+			const htmlSource = content.sources?.find((s) => s.type === 'text' && s.subtype === 'html')
 
 			if (htmlSource) {
-				const center = point ?? editor.getViewportPageCenter()
+				const center = content.point ?? editor.getViewportPageBounds().center
 
 				editor.createShape({
 					type: 'html',
@@ -61,13 +68,16 @@ export default function ExternalContentSourcesExample() {
 						html: htmlSource.data,
 					},
 				})
+			} else {
+				// otherwise, we'll fall back to the default handler
+				await defaultHandleExternalTextContent(editor, content)
 			}
 		})
 	}, [])
 
 	return (
 		<div className="tldraw__editor">
-			<Tldraw autoFocus onMount={handleMount} shapeUtils={[DangerousHtmlExample]} />
+			<Tldraw onMount={handleMount} shapeUtils={[DangerousHtmlExample]} />
 		</div>
 	)
 }

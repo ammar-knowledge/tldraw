@@ -1,26 +1,27 @@
-import { Article, ArticleHeadings, GeneratedContent } from '@/types/content-types'
-import GithubSlugger from 'github-slugger'
+import { Article, GeneratedContent } from '@/types/content-types'
+import console from 'console'
 import { Database } from 'sqlite'
 import sqlite3 from 'sqlite3'
+import { parseMarkdown } from './parse-markdown'
 
 export async function addContentToDb(
 	db: Database<sqlite3.Database, sqlite3.Statement>,
 	content: GeneratedContent
 ) {
 	const sectionInsert = await db.prepare(
-		`REPLACE INTO sections (id, idx, title, description, path, sidebar_behavior) VALUES (?, ?, ?, ?, ?, ?)`
+		`INSERT INTO sections (id, idx, title, description, path, sidebar_behavior) VALUES (?, ?, ?, ?, ?, ?)`
 	)
 
 	const categoryInsert = await db.prepare(
-		`REPLACE INTO categories (id, title, description, sectionId, sectionIndex, path) VALUES (?, ?, ?, ?, ?, ?)`
+		`INSERT INTO categories (id, title, description, sectionId, sectionIndex, path) VALUES (?, ?, ?, ?, ?, ?)`
 	)
 
 	const headingsInsert = await db.prepare(
-		`REPLACE INTO headings (idx, articleId, level, title, slug, isCode, path) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		`INSERT INTO headings (idx, articleId, level, title, slug, path) VALUES (?, ?, ?, ?, ?, ?)`
 	)
 
 	const articleInsert = await db.prepare(
-		`REPLACE INTO articles (
+		`INSERT INTO articles (
       id,
       groupIndex,
       categoryIndex,
@@ -38,9 +39,10 @@ export async function addContentToDb(
 			componentCode,
 			componentCodeFiles,
       keywords,
+	  apiTags,
       content,
 			path
-    ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	)
 
 	for (let i = 0; i < content.sections.length; i++) {
@@ -79,60 +81,51 @@ export async function addContentToDb(
 			throw Error(`hey, article ${article.id} has no id`)
 		}
 
-		await articleInsert.run(
-			article.id,
-			article.groupIndex,
-			article.categoryIndex,
-			article.sectionIndex,
-			article.groupId,
-			article.categoryId,
-			article.sectionId,
-			article.author,
-			article.title,
-			article.description,
-			article.hero,
-			article.status,
-			article.date,
-			article.sourceUrl,
-			article.componentCode,
-			article.componentCodeFiles,
-			article.keywords.join(', '),
-			article.content,
-			article.path
-		)
+		try {
+			await articleInsert.run(
+				article.id,
+				article.groupIndex,
+				article.categoryIndex,
+				article.sectionIndex,
+				article.groupId,
+				article.categoryId,
+				article.sectionId,
+				article.author
+					? typeof article.author === 'string'
+						? article.author
+						: article.author.join(', ')
+					: null,
+				article.title,
+				article.description,
+				article.hero,
+				article.status,
+				article.date,
+				article.sourceUrl,
+				article.componentCode,
+				article.componentCodeFiles,
+				article.keywords.join(', '),
+				article.apiTags,
+				article.content,
+				article.path
+			)
+		} catch (e: any) {
+			console.error(`ERROR: Could not add article with id '${article.id}'`)
+			throw e
+		}
 
 		await db.run(`DELETE FROM headings WHERE articleId = ?`, article.id)
 
 		await Promise.all(
-			getHeadingLinks(article.content ?? '').map((heading, i) =>
+			parseMarkdown(article.content ?? '', article.path ?? article.id).headings.map((heading, i) =>
 				headingsInsert.run(
 					i,
 					article.id,
 					heading.level,
 					heading.title,
 					heading.slug,
-					heading.isCode,
-					`${article.path}#${heading.slug}`
+					heading.slug ? `${article.path}#${heading.slug}` : article.path
 				)
 			)
 		)
 	}
-}
-
-const slugs = new GithubSlugger()
-
-const MATCH_HEADINGS = /(?:^|\n)(#{1,6})\s+(.+?)(?=\n|$)/g
-function getHeadingLinks(content: string) {
-	let match
-	const headings: ArticleHeadings = []
-	while ((match = MATCH_HEADINGS.exec(content)) !== null) {
-		slugs.reset()
-		headings.push({
-			level: match[1].length,
-			title: match[2].replaceAll('`', ''),
-			slug: slugs.slug(match[2], true),
-			isCode: match[2].startsWith('`'),
-		})
-	}
-	return headings
 }

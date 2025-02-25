@@ -1,23 +1,14 @@
 import { useEditor, useValue } from '@tldraw/editor'
 import classNames from 'classnames'
-import { useBreakpoint } from '../../hooks/useBreakpoint'
+import { PORTRAIT_BREAKPOINT } from '../../constants'
+import { useBreakpoint } from '../../context/breakpoints'
 import { useTranslation } from '../../hooks/useTranslation/useTranslation'
-import { Button } from '../primitives/Button'
+import { TldrawUiButton } from '../primitives/Button/TldrawUiButton'
+import { TldrawUiButtonIcon } from '../primitives/Button/TldrawUiButtonIcon'
 
 interface ToggleToolLockedButtonProps {
 	activeToolId?: string
 }
-
-const NOT_LOCKABLE_TOOLS = [
-	'select',
-	'hand',
-	'draw',
-	'eraser',
-	'text',
-	'zoom',
-	'laser',
-	'highlight',
-]
 
 export function ToggleToolLockedButton({ activeToolId }: ToggleToolLockedButtonProps) {
 	const editor = useEditor()
@@ -27,19 +18,21 @@ export function ToggleToolLockedButton({ activeToolId }: ToggleToolLockedButtonP
 	const isToolLocked = useValue('is tool locked', () => editor.getInstanceState().isToolLocked, [
 		editor,
 	])
+	const tool = useValue('current tool', () => editor.getCurrentTool(), [editor])
 
-	if (!activeToolId || NOT_LOCKABLE_TOOLS.includes(activeToolId)) return null
+	if (!activeToolId || !tool.isLockable) return null
 
 	return (
-		<Button
+		<TldrawUiButton
 			type="normal"
 			title={msg('action.toggle-tool-lock')}
+			data-testid="tool-lock"
 			className={classNames('tlui-toolbar__lock-button', {
-				'tlui-toolbar__lock-button__mobile': breakpoint < 5,
+				'tlui-toolbar__lock-button__mobile': breakpoint < PORTRAIT_BREAKPOINT.TABLET_SM,
 			})}
-			icon={isToolLocked ? 'lock' : 'unlock'}
 			onClick={() => editor.updateInstanceState({ isToolLocked: !isToolLocked })}
-			smallIcon
-		/>
+		>
+			<TldrawUiButtonIcon icon={isToolLocked ? 'lock' : 'unlock'} small />
+		</TldrawUiButton>
 	)
 }

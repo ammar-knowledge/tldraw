@@ -1,27 +1,21 @@
-Describe what your pull request does. If appropriate, add GIFs or images showing the before and after.
+Describe what your pull request does. If you can, add GIFs or images showing the before and after of your change.
 
-### Change Type
+### Change type
 
-- [ ] `patch` — Bug fix
-- [ ] `minor` — New feature
-- [ ] `major` — Breaking change
-- [ ] `dependencies` — Changes to package dependencies[^1]
-- [ ] `documentation` — Changes to the documentation only[^2]
-- [ ] `tests` — Changes to any test code only[^2]
-- [ ] `internal` — Any other changes that don't affect the published package[^2]
-- [ ] I don't know
+- [ ] `bugfix`
+- [ ] `improvement`
+- [ ] `feature`
+- [ ] `api`
+- [ ] `other`
 
-[^1]: publishes a `patch` release, for devDependencies use `internal`
-[^2]: will not publish a new version
+### Test plan
 
-### Test Plan
-
-1. Add a step-by-step description of how to test your PR here.
+1. Create a shape...
 2.
 
-- [ ] Unit Tests
+- [ ] Unit tests
 - [ ] End to end tests
 
-### Release Notes
+### Release notes
 
-- Add a brief release note for your PR here.
+- Fixed a bug with…

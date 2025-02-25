@@ -1,5 +1,5 @@
-import { Tldraw } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css'
+import { Tldraw } from 'tldraw'
+import 'tldraw/tldraw.css'
 
 export default function ScrollExample() {
 	return (
@@ -21,5 +21,7 @@ export default function ScrollExample() {
 }
 
 /*
-This example shows how you can use the Tldraw component inside a scrollable container.
+This example shows how you can use the Tldraw component inside a scrollable container. 
+The component will still accept mousewheel events while "focused". Try turning off the
+autoFocus prop to see the difference.
 */

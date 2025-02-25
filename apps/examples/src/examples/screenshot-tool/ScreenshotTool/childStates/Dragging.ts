@@ -1,4 +1,4 @@
-import { Box, StateNode, atom, copyAs, exportAs } from '@tldraw/tldraw'
+import { Box, StateNode, atom, copyAs, exportAs } from 'tldraw'
 
 // There's a guide at the bottom of this file!
 
@@ -9,19 +9,19 @@ export class ScreenshotDragging extends StateNode {
 	screenshotBox = atom('screenshot brush', new Box())
 
 	// [2]
-	override onEnter = () => {
+	override onEnter() {
 		this.update()
 	}
 
-	override onPointerMove = () => {
+	override onPointerMove() {
 		this.update()
 	}
 
-	override onKeyDown = () => {
+	override onKeyDown() {
 		this.update()
 	}
 
-	override onKeyUp = () => {
+	override onKeyUp() {
 		this.update()
 	}
 
@@ -59,7 +59,7 @@ export class ScreenshotDragging extends StateNode {
 	}
 
 	// [3]
-	override onPointerUp = () => {
+	override onPointerUp() {
 		const { editor } = this
 		const box = this.screenshotBox.get()
 
@@ -76,16 +76,18 @@ export class ScreenshotDragging extends StateNode {
 				copyAs(
 					editor,
 					shapes.map((s) => s.id),
-					'png',
-					{ bounds: box, background: editor.getInstanceState().exportBackground }
+					{ format: 'png', bounds: box }
 				)
 			} else {
 				// Export the shapes as a png
 				exportAs(
 					editor,
 					shapes.map((s) => s.id),
-					'png',
-					{ bounds: box, background: editor.getInstanceState().exportBackground }
+					{
+						format: 'png',
+						name: 'Screenshot',
+						bounds: box,
+					}
 				)
 			}
 		}
@@ -94,7 +96,7 @@ export class ScreenshotDragging extends StateNode {
 	}
 
 	// [4]
-	override onCancel = () => {
+	override onCancel() {
 		this.editor.setCurrentTool('select')
 	}
 }

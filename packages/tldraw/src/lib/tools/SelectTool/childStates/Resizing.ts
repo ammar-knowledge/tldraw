@@ -6,26 +6,26 @@ import {
 	SelectionCorner,
 	SelectionEdge,
 	StateNode,
-	TLEnterEventHandler,
-	TLEventHandlers,
 	TLFrameShape,
 	TLPointerEventInfo,
 	TLShape,
 	TLShapeId,
 	TLShapePartial,
-	TLTickEventHandler,
+	TLTextShape,
+	TLTickEventInfo,
 	Vec,
 	VecLike,
 	areAnglesCompatible,
 	compact,
-	moveCameraWhenCloseToEdge,
 } from '@tldraw/editor'
+import { kickoutOccludedShapes } from '../selectHelpers'
 
-type ResizingInfo = TLPointerEventInfo & {
+export type ResizingInfo = TLPointerEventInfo & {
 	target: 'selection'
 	handle: SelectionEdge | SelectionCorner
 	isCreating?: boolean
-	onCreate?: (shape: TLShape | null) => void
+	creatingMarkId?: string
+	onCreate?(shape: TLShape | null): void
 	creationCursorOffset?: VecLike
 	onInteractionEnd?: string
 }
@@ -47,8 +47,8 @@ export class Resizing extends StateNode {
 
 	private snapshot = {} as any as Snapshot
 
-	override onEnter: TLEnterEventHandler = (info: ResizingInfo) => {
-		const { isCreating = false, creationCursorOffset = { x: 0, y: 0 } } = info
+	override onEnter(info: ResizingInfo) {
+		const { isCreating = false, creatingMarkId, creationCursorOffset = { x: 0, y: 0 } } = info
 
 		this.info = info
 		this.didHoldCommand = false
@@ -58,46 +58,57 @@ export class Resizing extends StateNode {
 
 		this.snapshot = this._createSnapshot()
 
-		if (isCreating) {
-			this.markId = `creating:${this.editor.getOnlySelectedShape()!.id}`
+		this.markId = ''
 
-			this.editor.updateInstanceState(
-				{ cursor: { type: 'cross', rotation: 0 } },
-				{ ephemeral: true }
-			)
+		if (isCreating) {
+			if (creatingMarkId) {
+				this.markId = creatingMarkId
+			} else {
+				// handle legacy implicit `creating:{shapeId}` marks
+				const markId = this.editor.getMarkIdMatching(
+					`creating:${this.editor.getOnlySelectedShapeId()}`
+				)
+				if (markId) {
+					this.markId = markId
+				}
+			}
 		} else {
-			this.markId = 'starting resizing'
-			this.editor.mark(this.markId)
+			this.markId = this.editor.markHistoryStoppingPoint('starting resizing')
+		}
+
+		if (isCreating) {
+			this.editor.setCursor({ type: 'cross', rotation: 0 })
 		}
 
 		this.handleResizeStart()
 		this.updateShapes()
 	}
 
-	override onTick: TLTickEventHandler = () => {
-		moveCameraWhenCloseToEdge(this.editor)
+	override onTick({ elapsed }: TLTickEventInfo) {
+		const { editor } = this
+		editor.edgeScrollManager.updateEdgeScrolling(elapsed)
 	}
 
-	override onPointerMove: TLEventHandlers['onPointerMove'] = () => {
+	override onPointerMove() {
 		this.updateShapes()
 	}
 
-	override onKeyDown: TLEventHandlers['onKeyDown'] = () => {
+	override onKeyDown() {
 		this.updateShapes()
 	}
-	override onKeyUp: TLEventHandlers['onKeyUp'] = () => {
+	override onKeyUp() {
 		this.updateShapes()
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onPointerUp() {
 		this.complete()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.complete()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
@@ -112,6 +123,8 @@ export class Resizing extends StateNode {
 	}
 
 	private complete() {
+		kickoutOccludedShapes(this.editor, this.snapshot.selectedShapeIds)
+
 		this.handleResizeEnd()
 
 		if (this.info.isCreating && this.info.onCreate) {
@@ -176,7 +189,14 @@ export class Resizing extends StateNode {
 			canShapesDeform,
 		} = this.snapshot
 
-		const isAspectRatioLocked = shiftKey || !canShapesDeform
+		let isAspectRatioLocked = shiftKey || !canShapesDeform
+
+		if (shapeSnapshots.size === 1) {
+			const onlySnapshot = [...shapeSnapshots.values()][0]!
+			if (this.editor.isShapeOfType<TLTextShape>(onlySnapshot.shape, 'text')) {
+				isAspectRatioLocked = !(this.info.handle === 'left' || this.info.handle === 'right')
+			}
+		}
 
 		// first negate the 'cursor handle offset'
 		// we need to do this because we do grid snapping based on the page point of the handle
@@ -217,6 +237,7 @@ export class Resizing extends StateNode {
 			.clone()
 			.sub(cursorHandleOffset)
 			.sub(this.creationCursorOffset)
+
 		const originPagePoint = this.editor.inputs.originPagePoint.clone().sub(cursorHandleOffset)
 
 		if (this.editor.getInstanceState().isGridMode && !ctrlKey) {
@@ -227,12 +248,12 @@ export class Resizing extends StateNode {
 		const dragHandle = this.info.handle as SelectionCorner | SelectionEdge
 		const scaleOriginHandle = rotateSelectionHandle(dragHandle, Math.PI)
 
-		this.editor.snaps.clear()
+		this.editor.snaps.clearIndicators()
 
 		const shouldSnap = this.editor.user.getIsSnapMode() ? !ctrlKey : ctrlKey
 
 		if (shouldSnap && selectionRotation % HALF_PI === 0) {
-			const { nudge } = this.editor.snaps.snapResize({
+			const { nudge } = this.editor.snaps.shapeBounds.snapResizeShapes({
 				dragDelta: Vec.Sub(currentPagePoint, originPagePoint),
 				initialSelectionPageBounds: this.snapshot.initialSelectionPageBounds,
 				handle: rotateSelectionHandle(dragHandle, selectionRotation),
@@ -253,6 +274,8 @@ export class Resizing extends StateNode {
 
 		// calculate the scale by measuring the current distance between the drag handle and the scale origin
 		// and dividing by the original distance between the drag handle and the scale origin
+
+		// bug: for edges, the page point doesn't matter, the
 
 		const distanceFromScaleOriginNow = Vec.Sub(currentPagePoint, scaleOriginPage).rot(
 			-selectionRotation
@@ -317,7 +340,9 @@ export class Resizing extends StateNode {
 						? 'resize_bounds'
 						: 'scale_shape',
 				scaleOrigin: scaleOriginPage,
+				isAspectRatioLocked,
 				scaleAxisRotation: selectionRotation,
+				skipStartAndEndCallbacks: true,
 			})
 		}
 
@@ -403,16 +428,13 @@ export class Resizing extends StateNode {
 		this.editor.setCursor(nextCursor)
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.parent.setCurrentToolIdMask(undefined)
-		this.editor.updateInstanceState(
-			{ cursor: { type: 'default', rotation: 0 } },
-			{ ephemeral: true }
-		)
-		this.editor.snaps.clear()
+		this.editor.setCursor({ type: 'default', rotation: 0 })
+		this.editor.snaps.clearIndicators()
 	}
 
-	_createSnapshot = () => {
+	_createSnapshot() {
 		const selectedShapeIds = this.editor.getSelectedShapeIds()
 		const selectionRotation = this.editor.getSelectionRotation()
 		const {
@@ -479,7 +501,7 @@ export class Resizing extends StateNode {
 		}
 	}
 
-	_createShapeSnapshot = (shape: TLShape) => {
+	_createShapeSnapshot(shape: TLShape) {
 		const pageTransform = this.editor.getShapePageTransform(shape)!
 		const util = this.editor.getShapeUtil(shape)
 

@@ -1,12 +1,11 @@
 import {
-	DRAG_DISTANCE,
 	Mat,
 	StateNode,
 	TLDefaultSizeStyle,
 	TLDrawShape,
 	TLDrawShapeSegment,
-	TLEventHandlers,
 	TLHighlightShape,
+	TLKeyboardEventInfo,
 	TLPointerEventInfo,
 	TLShapePartial,
 	Vec,
@@ -14,10 +13,13 @@ import {
 	createShapeId,
 	last,
 	snapAngle,
+	structuredClone,
 	toFixed,
 	uniqueId,
 } from '@tldraw/editor'
+import { HighlightShapeUtil } from '../../highlight/HighlightShapeUtil'
 import { STROKE_SIZES } from '../../shared/default-shape-constants'
+import { DrawShapeUtil } from '../DrawShapeUtil'
 
 type DrawableShape = TLDrawShape | TLHighlightShape
 
@@ -30,9 +32,10 @@ export class Drawing extends StateNode {
 
 	override shapeType = this.parent.id === 'highlight' ? ('highlight' as const) : ('draw' as const)
 
-	util = this.editor.getShapeUtil(this.shapeType)
+	util = this.editor.getShapeUtil(this.shapeType) as DrawShapeUtil | HighlightShapeUtil
 
 	isPen = false
+	isPenOrStylus = false
 
 	segmentMode = 'free' as 'free' | 'straight' | 'starting_straight' | 'starting_free'
 
@@ -46,26 +49,19 @@ export class Drawing extends StateNode {
 	mergeNextPoint = false
 	currentLineLength = 0
 
-	canDraw = false
-
 	markId = null as null | string
 
-	override onEnter = (info: TLPointerEventInfo) => {
+	override onEnter(info: TLPointerEventInfo) {
 		this.markId = null
 		this.info = info
-		this.canDraw = !this.editor.getIsMenuOpen()
 		this.lastRecordedPoint = this.editor.inputs.currentPagePoint.clone()
-		if (this.canDraw) {
-			this.startShape()
-		}
+		this.startShape()
 	}
 
-	override onPointerMove: TLEventHandlers['onPointerMove'] = () => {
-		const {
-			editor: { inputs },
-		} = this
+	override onPointerMove() {
+		const { inputs } = this.editor
 
-		if (this.isPen !== inputs.isPen) {
+		if (this.isPen && !inputs.isPen) {
 			// The user made a palm gesture before starting a pen gesture;
 			// ideally we'd start the new shape here but we could also just bail
 			// as the next interaction will work correctly
@@ -74,35 +70,27 @@ export class Drawing extends StateNode {
 				this.startShape()
 				return
 			}
-		} else {
-			// If we came in from a menu but have no started dragging...
-			if (!this.canDraw && inputs.isDragging) {
-				this.startShape()
-				this.canDraw = true // bad name
-			}
 		}
 
-		if (this.canDraw) {
+		if (this.isPenOrStylus) {
 			// Don't update the shape if we haven't moved far enough from the last time we recorded a point
-			if (inputs.isPen) {
-				if (
-					Vec.Dist(inputs.currentPagePoint, this.lastRecordedPoint) >=
-					1 / this.editor.getZoomLevel()
-				) {
-					this.lastRecordedPoint = inputs.currentPagePoint.clone()
-					this.mergeNextPoint = false
-				} else {
-					this.mergeNextPoint = true
-				}
-			} else {
+			if (
+				Vec.Dist(inputs.currentPagePoint, this.lastRecordedPoint) >=
+				1 / this.editor.getZoomLevel()
+			) {
+				this.lastRecordedPoint = inputs.currentPagePoint.clone()
 				this.mergeNextPoint = false
+			} else {
+				this.mergeNextPoint = true
 			}
-
-			this.updateShapes()
+		} else {
+			this.mergeNextPoint = false
 		}
+
+		this.updateDrawingShape()
 	}
 
-	override onKeyDown: TLEventHandlers['onKeyDown'] = (info) => {
+	override onKeyDown(info: TLKeyboardEventInfo) {
 		if (info.key === 'Shift') {
 			switch (this.segmentMode) {
 				case 'free': {
@@ -116,12 +104,12 @@ export class Drawing extends StateNode {
 				}
 			}
 		}
-		this.updateShapes()
+		this.updateDrawingShape()
 	}
 
-	override onKeyUp: TLEventHandlers['onKeyUp'] = (info) => {
+	override onKeyUp(info: TLKeyboardEventInfo) {
 		if (info.key === 'Shift') {
-			this.editor.snaps.clear()
+			this.editor.snaps.clearIndicators()
 
 			switch (this.segmentMode) {
 				case 'straight': {
@@ -138,11 +126,11 @@ export class Drawing extends StateNode {
 			}
 		}
 
-		this.updateShapes()
+		this.updateDrawingShape()
 	}
 
-	override onExit? = () => {
-		this.editor.snaps.clear()
+	override onExit() {
+		this.editor.snaps.clearIndicators()
 		this.pagePointWhereCurrentSegmentChanged = this.editor.inputs.currentPagePoint.clone()
 	}
 
@@ -150,7 +138,7 @@ export class Drawing extends StateNode {
 		return this.shapeType !== 'highlight'
 	}
 
-	getIsClosed(segments: TLDrawShapeSegment[], size: TLDefaultSizeStyle) {
+	getIsClosed(segments: TLDrawShapeSegment[], size: TLDefaultSizeStyle, scale: number) {
 		if (!this.canClose()) return false
 
 		const strokeWidth = STROKE_SIZES[size]
@@ -160,8 +148,8 @@ export class Drawing extends StateNode {
 
 		return (
 			firstPoint !== lastPoint &&
-			this.currentLineLength > strokeWidth * 4 &&
-			Vec.Dist(firstPoint, lastPoint) < strokeWidth * 2
+			this.currentLineLength > strokeWidth * 4 * scale &&
+			Vec.DistMin(firstPoint, lastPoint, strokeWidth * 2 * scale)
 		)
 	}
 
@@ -170,12 +158,19 @@ export class Drawing extends StateNode {
 			inputs: { originPagePoint, isPen },
 		} = this.editor
 
-		this.markId = 'draw start ' + uniqueId()
-		this.editor.mark(this.markId)
+		this.markId = this.editor.markHistoryStoppingPoint('draw start')
+
+		// If the pressure is weird, then it's probably a stylus reporting as a mouse
+		// We treat pen/stylus inputs differently in the drawing tool, so we need to
+		// have our own value for this. The inputs.isPen is only if the input is a regular
+		// pen, like an iPad pen, which needs to trigger "pen mode" in order to avoid
+		// accidental palm touches. We don't have to worry about that with styluses though.
+		const { z = 0.5 } = this.info.point
 
 		this.isPen = isPen
+		this.isPenOrStylus = isPen || (z > 0 && z < 0.5) || (z > 0.5 && z < 1)
 
-		const pressure = this.isPen ? this.info.point.z! * 1.25 : 0.5
+		const pressure = this.isPenOrStylus ? z * 1.25 : 0.5
 
 		this.segmentMode = this.editor.inputs.shiftKey ? 'straight' : 'free'
 
@@ -197,8 +192,6 @@ export class Drawing extends StateNode {
 				if (!prevPoint) throw Error('Expected a previous point!')
 
 				const { x, y } = this.editor.getPointInShapeSpace(shape, originPagePoint).toFixed()
-
-				const pressure = this.isPen ? this.info.point.z! * 1.25 : 0.5
 
 				const newSegment: TLDrawShapeSegment = {
 					type: this.segmentMode,
@@ -225,7 +218,9 @@ export class Drawing extends StateNode {
 				this.pagePointWhereNextSegmentChanged = null
 				const segments = [...shape.props.segments, newSegment]
 
-				this.currentLineLength = this.getLineLength(segments)
+				if (this.currentLineLength < STROKE_SIZES[shape.props.size] * 4) {
+					this.currentLineLength = this.getLineLength(segments)
+				}
 
 				const shapePartial: TLShapePartial<DrawableShape> = {
 					id: shape.id,
@@ -238,7 +233,8 @@ export class Drawing extends StateNode {
 				if (this.canClose()) {
 					;(shapePartial as TLShapePartial<TLDrawShape>).props!.isClosed = this.getIsClosed(
 						segments,
-						shape.props.size
+						shape.props.size,
+						shape.props.scale
 					)
 				}
 
@@ -260,7 +256,8 @@ export class Drawing extends StateNode {
 				x: originPagePoint.x,
 				y: originPagePoint.y,
 				props: {
-					isPen: this.isPen,
+					isPen: this.isPenOrStylus,
+					scale: this.editor.user.getIsDynamicResizeMode() ? 1 / this.editor.getZoomLevel() : 1,
 					segments: [
 						{
 							type: this.segmentMode,
@@ -280,15 +277,15 @@ export class Drawing extends StateNode {
 		this.initialShape = this.editor.getShape<DrawableShape>(id)
 	}
 
-	private updateShapes() {
-		const { inputs } = this.editor
+	private updateDrawingShape() {
 		const { initialShape } = this
+		const { inputs } = this.editor
 
 		if (!initialShape) return
 
 		const {
 			id,
-			props: { size },
+			props: { size, scale },
 		} = initialShape
 
 		const shape = this.editor.getShape<DrawableShape>(id)!
@@ -298,8 +295,8 @@ export class Drawing extends StateNode {
 		const { segments } = shape.props
 
 		const { x, y, z } = this.editor.getPointInShapeSpace(shape, inputs.currentPagePoint).toFixed()
-
-		const newPoint = { x, y, z: this.isPen ? +(z! * 1.25).toFixed(2) : 0.5 }
+		const pressure = this.isPenOrStylus ? +(inputs.currentPagePoint.z! * 1.25).toFixed(2) : 0.5
+		const newPoint = { x, y, z: pressure }
 
 		switch (this.segmentMode) {
 			case 'starting_straight': {
@@ -310,7 +307,8 @@ export class Drawing extends StateNode {
 				}
 
 				const hasMovedFarEnough =
-					Vec.Dist(pagePointWhereNextSegmentChanged, inputs.currentPagePoint) > DRAG_DISTANCE
+					Vec.Dist2(pagePointWhereNextSegmentChanged, inputs.currentPagePoint) >
+					this.editor.options.dragDistanceSquared
 
 				// Find the distance from where the pointer was when shift was released and
 				// where it is now; if it's far enough away, then update the page point where
@@ -365,13 +363,12 @@ export class Drawing extends StateNode {
 					if (this.canClose()) {
 						;(shapePartial as TLShapePartial<TLDrawShape>).props!.isClosed = this.getIsClosed(
 							segments,
-							size
+							size,
+							scale
 						)
 					}
 
-					this.editor.updateShapes<TLDrawShape | TLHighlightShape>([shapePartial], {
-						squashing: true,
-					})
+					this.editor.updateShapes<TLDrawShape | TLHighlightShape>([shapePartial])
 				}
 				break
 			}
@@ -383,7 +380,8 @@ export class Drawing extends StateNode {
 				}
 
 				const hasMovedFarEnough =
-					Vec.Dist(pagePointWhereNextSegmentChanged, inputs.currentPagePoint) > DRAG_DISTANCE
+					Vec.Dist2(pagePointWhereNextSegmentChanged, inputs.currentPagePoint) >
+					this.editor.options.dragDistanceSquared
 
 				// Find the distance from where the pointer was when shift was released and
 				// where it is now; if it's far enough away, then update the page point where
@@ -408,11 +406,20 @@ export class Drawing extends StateNode {
 					// ended and where the pointer is now
 					const newFreeSegment: TLDrawShapeSegment = {
 						type: 'free',
-						points: [...Vec.PointsBetween(prevPoint, newPoint, 6).map((p) => p.toFixed().toJson())],
+						points: [
+							...Vec.PointsBetween(prevPoint, newPoint, 6).map((p) => ({
+								x: toFixed(p.x),
+								y: toFixed(p.y),
+								z: toFixed(p.z),
+							})),
+						],
 					}
 
 					const finalSegments = [...newSegments, newFreeSegment]
-					this.currentLineLength = this.getLineLength(finalSegments)
+
+					if (this.currentLineLength < STROKE_SIZES[shape.props.size] * 4) {
+						this.currentLineLength = this.getLineLength(finalSegments)
+					}
 
 					const shapePartial: TLShapePartial<DrawableShape> = {
 						id,
@@ -425,11 +432,12 @@ export class Drawing extends StateNode {
 					if (this.canClose()) {
 						;(shapePartial as TLShapePartial<TLDrawShape>).props!.isClosed = this.getIsClosed(
 							finalSegments,
-							size
+							size,
+							scale
 						)
 					}
 
-					this.editor.updateShapes([shapePartial], { squashing: true })
+					this.editor.updateShapes([shapePartial])
 				}
 
 				break
@@ -439,7 +447,7 @@ export class Drawing extends StateNode {
 				const newSegment = newSegments[newSegments.length - 1]
 
 				const { pagePointWhereCurrentSegmentChanged } = this
-				const { currentPagePoint, ctrlKey } = this.editor.inputs
+				const { ctrlKey, currentPagePoint } = this.editor.inputs
 
 				if (!pagePointWhereCurrentSegmentChanged)
 					throw Error('We should have a point where the segment changed')
@@ -487,11 +495,10 @@ export class Drawing extends StateNode {
 								lastPoint,
 								newPoint
 							)
-							const distance = Vec.Dist(nearestPointOnSegment, newPoint)
 
-							if (distance < minDistance) {
+							if (Vec.DistMin(nearestPointOnSegment, newPoint, minDistance)) {
 								nearestPoint = nearestPointOnSegment.toFixed().toJson()
-								minDistance = distance
+								minDistance = Vec.Dist(nearestPointOnSegment, newPoint)
 								snapSegment = segment
 								break
 							}
@@ -516,7 +523,7 @@ export class Drawing extends StateNode {
 
 					const snappedPoint = Mat.applyToPoint(transform, newPoint)
 
-					this.editor.snaps.setLines([
+					this.editor.snaps.setIndicators([
 						{
 							id: uniqueId(),
 							type: 'points',
@@ -524,7 +531,7 @@ export class Drawing extends StateNode {
 						},
 					])
 				} else {
-					this.editor.snaps.clear()
+					this.editor.snaps.clearIndicators()
 
 					if (shouldSnapToAngle) {
 						// Snap line angle to nearest 15 degrees
@@ -567,11 +574,12 @@ export class Drawing extends StateNode {
 				if (this.canClose()) {
 					;(shapePartial as TLShapePartial<TLDrawShape>).props!.isClosed = this.getIsClosed(
 						segments,
-						size
+						size,
+						scale
 					)
 				}
 
-				this.editor.updateShapes([shapePartial], { squashing: true })
+				this.editor.updateShapes([shapePartial])
 
 				break
 			}
@@ -599,7 +607,9 @@ export class Drawing extends StateNode {
 					points: newPoints,
 				}
 
-				this.currentLineLength = this.getLineLength(newSegments)
+				if (this.currentLineLength < STROKE_SIZES[shape.props.size] * 4) {
+					this.currentLineLength = this.getLineLength(newSegments)
+				}
 
 				const shapePartial: TLShapePartial<DrawableShape> = {
 					id,
@@ -612,32 +622,34 @@ export class Drawing extends StateNode {
 				if (this.canClose()) {
 					;(shapePartial as TLShapePartial<TLDrawShape>).props!.isClosed = this.getIsClosed(
 						newSegments,
-						size
+						size,
+						scale
 					)
 				}
 
-				this.editor.updateShapes([shapePartial], { squashing: true })
+				this.editor.updateShapes([shapePartial])
 
 				// Set a maximum length for the lines array; after 200 points, complete the line.
-				if (newPoints.length > 500) {
+				if (newPoints.length > this.util.options.maxPointsPerShape) {
 					this.editor.updateShapes([{ id, type: this.shapeType, props: { isComplete: true } }])
 
-					const { currentPagePoint } = this.editor.inputs
-
 					const newShapeId = createShapeId()
+
+					const props = this.editor.getShape<DrawableShape>(id)!.props
 
 					this.editor.createShapes<DrawableShape>([
 						{
 							id: newShapeId,
 							type: this.shapeType,
-							x: toFixed(currentPagePoint.x),
-							y: toFixed(currentPagePoint.y),
+							x: toFixed(inputs.currentPagePoint.x),
+							y: toFixed(inputs.currentPagePoint.y),
 							props: {
-								isPen: this.isPen,
+								isPen: this.isPenOrStylus,
+								scale: props.scale,
 								segments: [
 									{
 										type: 'free',
-										points: [{ x: 0, y: 0, z: this.isPen ? +(z! * 1.25).toFixed() : 0.5 }],
+										points: [{ x: 0, y: 0, z: this.isPenOrStylus ? +(z! * 1.25).toFixed() : 0.5 }],
 									},
 								],
 							},
@@ -646,7 +658,7 @@ export class Drawing extends StateNode {
 
 					this.initialShape = structuredClone(this.editor.getShape<DrawableShape>(newShapeId)!)
 					this.mergeNextPoint = false
-					this.lastRecordedPoint = this.editor.inputs.currentPagePoint.clone()
+					this.lastRecordedPoint = inputs.currentPagePoint.clone()
 					this.currentLineLength = 0
 				}
 
@@ -662,26 +674,26 @@ export class Drawing extends StateNode {
 			for (let i = 0; i < segment.points.length - 1; i++) {
 				const A = segment.points[i]
 				const B = segment.points[i + 1]
-				length += Vec.Sub(B, A).len2()
+				length += Vec.Dist2(B, A)
 			}
 		}
 
 		return Math.sqrt(length)
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onPointerUp() {
 		this.complete()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.complete()
 	}
 
-	override onInterrupt: TLEventHandlers['onInterrupt'] = () => {
+	override onInterrupt() {
 		if (this.editor.inputs.isDragging) {
 			return
 		}
@@ -693,15 +705,6 @@ export class Drawing extends StateNode {
 	}
 
 	complete() {
-		// If we weren't focused when the drawing shape started, and if
-		// we haven't dragged far enough to start dragging, then don't do
-		// anything here. Most likely we clicked back into the canvas from
-		// a menu or other UI element.
-		if (!this.canDraw) {
-			this.cancel()
-			return
-		}
-
 		const { initialShape } = this
 		if (!initialShape) return
 		this.editor.updateShapes([

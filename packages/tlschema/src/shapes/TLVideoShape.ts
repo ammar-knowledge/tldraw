@@ -1,10 +1,25 @@
-import { defineMigrations } from '@tldraw/store'
 import { T } from '@tldraw/validate'
 import { assetIdValidator } from '../assets/TLBaseAsset'
-import { ShapePropsType, TLBaseShape } from './TLBaseShape'
+import { TLAssetId } from '../records/TLAsset'
+import { createShapePropsMigrationIds, createShapePropsMigrationSequence } from '../records/TLShape'
+import { RecordProps } from '../recordsWithProps'
+import { TLBaseShape } from './TLBaseShape'
 
 /** @public */
-export const videoShapeProps = {
+export interface TLVideoShapeProps {
+	w: number
+	h: number
+	time: number
+	playing: boolean
+	url: string
+	assetId: TLAssetId | null
+}
+
+/** @public */
+export type TLVideoShape = TLBaseShape<'video', TLVideoShapeProps>
+
+/** @public */
+export const videoShapeProps: RecordProps<TLVideoShape> = {
 	w: T.nonZeroNumber,
 	h: T.nonZeroNumber,
 	time: T.number,
@@ -13,39 +28,33 @@ export const videoShapeProps = {
 	assetId: assetIdValidator.nullable(),
 }
 
-/** @public */
-export type TLVideoShapeProps = ShapePropsType<typeof videoShapeProps>
-
-/** @public */
-export type TLVideoShape = TLBaseShape<'video', TLVideoShapeProps>
-
-const Versions = {
+const Versions = createShapePropsMigrationIds('video', {
 	AddUrlProp: 1,
 	MakeUrlsValid: 2,
-} as const
+})
 
-/** @internal */
-export const videoShapeMigrations = defineMigrations({
-	currentVersion: Versions.MakeUrlsValid,
-	migrators: {
-		[Versions.AddUrlProp]: {
-			up: (shape) => {
-				return { ...shape, props: { ...shape.props, url: '' } }
+export { Versions as videoShapeVersions }
+
+/** @public */
+export const videoShapeMigrations = createShapePropsMigrationSequence({
+	sequence: [
+		{
+			id: Versions.AddUrlProp,
+			up: (props) => {
+				props.url = ''
 			},
-			down: (shape) => {
-				const { url: _, ...props } = shape.props
-				return { ...shape, props }
-			},
+			down: 'retired',
 		},
-		[Versions.MakeUrlsValid]: {
-			up: (shape) => {
-				const url = shape.props.url
-				if (url !== '' && !T.linkUrl.isValid(shape.props.url)) {
-					return { ...shape, props: { ...shape.props, url: '' } }
+		{
+			id: Versions.MakeUrlsValid,
+			up: (props) => {
+				if (!T.linkUrl.isValid(props.url)) {
+					props.url = ''
 				}
-				return shape
 			},
-			down: (shape) => shape,
+			down: (_props) => {
+				// noop
+			},
 		},
-	},
+	],
 })

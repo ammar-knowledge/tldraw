@@ -1,4 +1,4 @@
-import { uniqueId } from '@tldraw/tldraw'
+import { uniqueId } from 'tldraw'
 import * as vscode from 'vscode'
 import { TLDrawDocument } from './TldrawDocument'
 import { GlobalStateKeys, WebViewMessageHandler } from './WebViewMessageHandler'
@@ -52,11 +52,12 @@ export class TldrawWebviewManager {
 		webviewPanel.onDidDispose(this.handleDidDispose)
 	}
 
+	// eslint-disable-next-line local/prefer-class-methods
 	private handleDidDispose = () => {
 		this.disposables.forEach(({ dispose }) => dispose())
 	}
 
-	private getHtmlForWebview = (assetSrc: string): string => {
+	getHtmlForWebview(assetSrc: string) {
 		return `
       <!DOCTYPE html>
       <html lang="en">

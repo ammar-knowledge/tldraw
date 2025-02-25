@@ -1,32 +1,41 @@
 import {
-	Box,
+	BoundsSnapPoint,
 	Editor,
 	Mat,
 	MatModel,
 	PageRecordType,
-	SnapPoint,
 	StateNode,
-	TLEventHandlers,
+	TLNoteShape,
 	TLPointerEventInfo,
 	TLShape,
 	TLShapePartial,
-	TLTickEventHandler,
+	TLTickEventInfo,
 	Vec,
+	bind,
 	compact,
 	isPageId,
-	moveCameraWhenCloseToEdge,
 } from '@tldraw/editor'
+import {
+	NOTE_ADJACENT_POSITION_SNAP_RADIUS,
+	NOTE_CENTER_OFFSET,
+	getAvailableNoteAdjacentPositions,
+} from '../../../shapes/note/noteHelpers'
 import { DragAndDropManager } from '../DragAndDropManager'
+import { kickoutOccludedShapes } from '../selectHelpers'
+
+export type TranslatingInfo = TLPointerEventInfo & {
+	target: 'shape'
+	isCreating?: boolean
+	creatingMarkId?: string
+	onCreate?(): void
+	didStartInPit?: boolean
+	onInteractionEnd?: string
+}
 
 export class Translating extends StateNode {
 	static override id = 'translating'
 
-	info = {} as TLPointerEventInfo & {
-		target: 'shape'
-		isCreating?: boolean
-		onCreate?: () => void
-		onInteractionEnd?: string
-	}
+	info = {} as TranslatingInfo
 
 	selectionSnapshot: TranslatingSnapshot = {} as any
 
@@ -36,31 +45,43 @@ export class Translating extends StateNode {
 
 	isCloning = false
 	isCreating = false
-	onCreate: (shape: TLShape | null) => void = () => void null
+	onCreate(_shape: TLShape | null): void {
+		return
+	}
 
 	dragAndDropManager = new DragAndDropManager(this.editor)
 
-	override onEnter = (
-		info: TLPointerEventInfo & {
-			target: 'shape'
-			isCreating?: boolean
-			onCreate?: () => void
-			onInteractionEnd?: string
+	override onEnter(info: TranslatingInfo) {
+		const { isCreating = false, creatingMarkId, onCreate = () => void null } = info
+
+		if (!this.editor.getSelectedShapeIds()?.length) {
+			this.parent.transition('idle')
+			return
 		}
-	) => {
-		const { isCreating = false, onCreate = () => void null } = info
 
 		this.info = info
 		this.parent.setCurrentToolIdMask(info.onInteractionEnd)
 		this.isCreating = isCreating
-		this.onCreate = onCreate
+
+		this.markId = ''
 
 		if (isCreating) {
-			this.markId = `creating:${this.editor.getOnlySelectedShape()!.id}`
+			if (creatingMarkId) {
+				this.markId = creatingMarkId
+			} else {
+				// handle legacy implicit `creating:{shapeId}` marks
+				const markId = this.editor.getMarkIdMatching(
+					`creating:${this.editor.getOnlySelectedShapeId()}`
+				)
+				if (markId) {
+					this.markId = markId
+				}
+			}
 		} else {
-			this.markId = 'translating'
-			this.editor.mark(this.markId)
+			this.markId = this.editor.markHistoryStoppingPoint('translating')
 		}
+
+		this.onCreate = onCreate
 
 		this.isCloning = false
 		this.info = info
@@ -81,31 +102,29 @@ export class Translating extends StateNode {
 		this.updateShapes()
 	}
 
-	override onExit = () => {
+	override onExit() {
 		this.parent.setCurrentToolIdMask(undefined)
 		this.selectionSnapshot = {} as any
 		this.snapshot = {} as any
-		this.editor.snaps.clear()
-		this.editor.updateInstanceState(
-			{ cursor: { type: 'default', rotation: 0 } },
-			{ ephemeral: true }
-		)
+		this.editor.snaps.clearIndicators()
+		this.editor.setCursor({ type: 'default', rotation: 0 })
 		this.dragAndDropManager.clear()
 	}
 
-	override onTick: TLTickEventHandler = () => {
+	override onTick({ elapsed }: TLTickEventInfo) {
+		const { editor } = this
 		this.dragAndDropManager.updateDroppingNode(
 			this.snapshot.movingShapes,
 			this.updateParentTransforms
 		)
-		moveCameraWhenCloseToEdge(this.editor)
+		editor.edgeScrollManager.updateEdgeScrolling(elapsed)
 	}
 
-	override onPointerMove = () => {
+	override onPointerMove() {
 		this.updateShapes()
 	}
 
-	override onKeyDown = () => {
+	override onKeyDown() {
 		if (this.editor.inputs.altKey && !this.isCloning) {
 			this.startCloning()
 			return
@@ -115,7 +134,7 @@ export class Translating extends StateNode {
 		this.updateShapes()
 	}
 
-	override onKeyUp: TLEventHandlers['onKeyUp'] = () => {
+	override onKeyUp() {
 		if (!this.editor.inputs.altKey && this.isCloning) {
 			this.stopCloning()
 			return
@@ -125,15 +144,15 @@ export class Translating extends StateNode {
 		this.updateShapes()
 	}
 
-	override onPointerUp: TLEventHandlers['onPointerUp'] = () => {
+	override onPointerUp() {
 		this.complete()
 	}
 
-	override onComplete: TLEventHandlers['onComplete'] = () => {
+	override onComplete() {
 		this.complete()
 	}
 
-	override onCancel: TLEventHandlers['onCancel'] = () => {
+	override onCancel() {
 		this.cancel()
 	}
 
@@ -142,8 +161,7 @@ export class Translating extends StateNode {
 
 		this.isCloning = true
 		this.reset()
-		this.markId = 'translating'
-		this.editor.mark(this.markId)
+		this.markId = this.editor.markHistoryStoppingPoint('translate cloning')
 
 		this.editor.duplicateShapes(Array.from(this.editor.getSelectedShapeIds()))
 
@@ -156,8 +174,7 @@ export class Translating extends StateNode {
 		this.isCloning = false
 		this.snapshot = this.selectionSnapshot
 		this.reset()
-		this.markId = 'translating'
-		this.editor.mark(this.markId)
+		this.markId = this.editor.markHistoryStoppingPoint('translate')
 		this.updateShapes()
 	}
 
@@ -168,6 +185,10 @@ export class Translating extends StateNode {
 	protected complete() {
 		this.updateShapes()
 		this.dragAndDropManager.dropShapes(this.snapshot.movingShapes)
+		kickoutOccludedShapes(
+			this.editor,
+			this.snapshot.movingShapes.map((s) => s.id)
+		)
 		this.handleEnd()
 
 		if (this.editor.getInstanceState().isToolLocked && this.info.onInteractionEnd) {
@@ -213,17 +234,19 @@ export class Translating extends StateNode {
 	protected handleEnd() {
 		const { movingShapes } = this.snapshot
 
-		if (this.isCloning) {
+		if (this.isCloning && movingShapes.length > 0) {
 			const currentAveragePagePoint = Vec.Average(
 				movingShapes.map((s) => this.editor.getShapePageTransform(s.id)!.point())
 			)
 			const offset = Vec.Sub(currentAveragePagePoint, this.selectionSnapshot.averagePagePoint)
-			this.editor.updateInstanceState({
-				duplicateProps: {
-					shapeIds: movingShapes.map((s) => s.id),
-					offset: { x: offset.x, y: offset.y },
-				},
-			})
+			if (!Vec.IsNaN(offset)) {
+				this.editor.updateInstanceState({
+					duplicateProps: {
+						shapeIds: movingShapes.map((s) => s.id),
+						offset: { x: offset.x, y: offset.y },
+					},
+				})
+			}
 		}
 
 		const changes: TLShapePartial[] = []
@@ -242,8 +265,17 @@ export class Translating extends StateNode {
 		}
 	}
 
-	protected handleChange() {
-		const { movingShapes } = this.snapshot
+	protected updateShapes() {
+		const { snapshot } = this
+
+		this.dragAndDropManager.updateDroppingNode(snapshot.movingShapes, this.updateParentTransforms)
+
+		moveShapesToPoint({
+			editor: this.editor,
+			snapshot,
+		})
+
+		const { movingShapes } = snapshot
 
 		const changes: TLShapePartial[] = []
 
@@ -261,22 +293,8 @@ export class Translating extends StateNode {
 		}
 	}
 
-	protected updateShapes() {
-		const { snapshot } = this
-		this.dragAndDropManager.updateDroppingNode(snapshot.movingShapes, this.updateParentTransforms)
-
-		moveShapesToPoint({
-			editor: this.editor,
-			shapeSnapshots: snapshot.shapeSnapshots,
-			averagePagePoint: snapshot.averagePagePoint,
-			initialSelectionPageBounds: snapshot.initialPageBounds,
-			initialSelectionSnapPoints: snapshot.initialSnapPoints,
-		})
-
-		this.handleChange()
-	}
-
-	protected updateParentTransforms = () => {
+	@bind
+	protected updateParentTransforms() {
 		const {
 			editor,
 			snapshot: { shapeSnapshots },
@@ -301,14 +319,17 @@ function getTranslatingSnapshot(editor: Editor) {
 	const movingShapes: TLShape[] = []
 	const pagePoints: Vec[] = []
 
+	const selectedShapeIds = editor.getSelectedShapeIds()
 	const shapeSnapshots = compact(
-		editor.getSelectedShapeIds().map((id): null | MovingShapeSnapshot => {
+		selectedShapeIds.map((id): null | MovingShapeSnapshot => {
 			const shape = editor.getShape(id)
 			if (!shape) return null
 			movingShapes.push(shape)
 
-			const pagePoint = editor.getShapePageTransform(id)!.point()
-			if (!pagePoint) return null
+			const pageTransform = editor.getShapePageTransform(id)
+			const pagePoint = pageTransform.point()
+			const pageRotation = pageTransform.rotation()
+
 			pagePoints.push(pagePoint)
 
 			const parentTransform = PageRecordType.isId(shape.parentId)
@@ -318,23 +339,63 @@ function getTranslatingSnapshot(editor: Editor) {
 			return {
 				shape,
 				pagePoint,
+				pageRotation,
 				parentTransform,
 			}
 		})
 	)
 
-	let initialSnapPoints: SnapPoint[] = []
-	if (editor.getSelectedShapeIds().length === 1) {
-		initialSnapPoints = editor.snaps.getSnapPointsCache().get(editor.getSelectedShapeIds()[0])!
+	const onlySelectedShape = editor.getOnlySelectedShape()
+
+	let initialSnapPoints: BoundsSnapPoint[] = []
+
+	if (onlySelectedShape) {
+		initialSnapPoints = editor.snaps.shapeBounds.getSnapPoints(onlySelectedShape.id)!
 	} else {
 		const selectionPageBounds = editor.getSelectionPageBounds()
 		if (selectionPageBounds) {
-			initialSnapPoints = selectionPageBounds.snapPoints.map((p, i) => ({
+			initialSnapPoints = selectionPageBounds.cornersAndCenter.map((p, i) => ({
 				id: 'selection:' + i,
 				x: p.x,
 				y: p.y,
 			}))
 		}
+	}
+
+	let noteAdjacentPositions: Vec[] | undefined
+	let noteSnapshot: (MovingShapeSnapshot & { shape: TLNoteShape }) | undefined
+
+	const { originPagePoint } = editor.inputs
+
+	const allHoveredNotes = shapeSnapshots.filter(
+		(s) =>
+			editor.isShapeOfType<TLNoteShape>(s.shape, 'note') &&
+			editor.isPointInShape(s.shape, originPagePoint)
+	) as (MovingShapeSnapshot & { shape: TLNoteShape })[]
+
+	if (allHoveredNotes.length === 0) {
+		// noop
+	} else if (allHoveredNotes.length === 1) {
+		// just one, easy
+		noteSnapshot = allHoveredNotes[0]
+	} else {
+		// More than one under the cursor, so we need to find the highest shape in z-order
+		const allShapesSorted = editor.getCurrentPageShapesSorted()
+		noteSnapshot = allHoveredNotes
+			.map((s) => ({
+				snapshot: s,
+				index: allShapesSorted.findIndex((shape) => shape.id === s.shape.id),
+			}))
+			.sort((a, b) => b.index - a.index)[0]?.snapshot // highest up first
+	}
+
+	if (noteSnapshot) {
+		noteAdjacentPositions = getAvailableNoteAdjacentPositions(
+			editor,
+			noteSnapshot.pageRotation,
+			noteSnapshot.shape.props.scale,
+			noteSnapshot.shape.props.growY ?? 0
+		)
 	}
 
 	return {
@@ -343,6 +404,8 @@ function getTranslatingSnapshot(editor: Editor) {
 		shapeSnapshots,
 		initialPageBounds: editor.getSelectionPageBounds()!,
 		initialSnapPoints,
+		noteAdjacentPositions,
+		noteSnapshot,
 	}
 }
 
@@ -351,23 +414,27 @@ export type TranslatingSnapshot = ReturnType<typeof getTranslatingSnapshot>
 export interface MovingShapeSnapshot {
 	shape: TLShape
 	pagePoint: Vec
+	pageRotation: number
 	parentTransform: MatModel | null
 }
 
 export function moveShapesToPoint({
 	editor,
-	shapeSnapshots: snapshots,
-	averagePagePoint,
-	initialSelectionPageBounds,
-	initialSelectionSnapPoints,
+	snapshot,
 }: {
 	editor: Editor
-	shapeSnapshots: MovingShapeSnapshot[]
-	averagePagePoint: Vec
-	initialSelectionPageBounds: Box
-	initialSelectionSnapPoints: SnapPoint[]
+	snapshot: TranslatingSnapshot
 }) {
 	const { inputs } = editor
+
+	const {
+		noteSnapshot,
+		noteAdjacentPositions,
+		initialPageBounds,
+		initialSnapPoints,
+		shapeSnapshots,
+		averagePagePoint,
+	} = snapshot
 
 	const isGridMode = editor.getInstanceState().isGridMode
 
@@ -388,26 +455,54 @@ export function moveShapesToPoint({
 	}
 
 	// Provisional snapping
-	editor.snaps.clear()
+	editor.snaps.clearIndicators()
 
-	const shouldSnap =
-		(editor.user.getIsSnapMode() ? !inputs.ctrlKey : inputs.ctrlKey) &&
-		editor.inputs.pointerVelocity.len() < 0.5 // ...and if the user is not dragging fast
-
-	if (shouldSnap) {
-		const { nudge } = editor.snaps.snapTranslate({
+	// If the user isn't moving super quick
+	const isSnapping = editor.user.getIsSnapMode() ? !inputs.ctrlKey : inputs.ctrlKey
+	let snappedToPit = false
+	if (isSnapping && editor.inputs.pointerVelocity.len() < 0.5) {
+		// snapping
+		const { nudge } = editor.snaps.shapeBounds.snapTranslateShapes({
 			dragDelta: delta,
-			initialSelectionPageBounds,
+			initialSelectionPageBounds: initialPageBounds,
 			lockedAxis: flatten,
-			initialSelectionSnapPoints,
+			initialSelectionSnapPoints: initialSnapPoints,
 		})
 
 		delta.add(nudge)
+	} else {
+		// for sticky notes, snap to grid position next to other notes
+		if (noteSnapshot && noteAdjacentPositions) {
+			const { scale } = noteSnapshot.shape.props
+			const pageCenter = noteSnapshot.pagePoint
+				.clone()
+				.add(delta)
+				// use the middle of the note, disregarding extra height
+				.add(NOTE_CENTER_OFFSET.clone().mul(scale).rot(noteSnapshot.pageRotation))
+
+			// Find the pit with the center closest to the put center
+			let min = NOTE_ADJACENT_POSITION_SNAP_RADIUS / editor.getZoomLevel() // in screen space
+			let offset = new Vec(0, 0)
+			for (const pit of noteAdjacentPositions) {
+				// We've already filtered pits with the same page rotation
+				const deltaToPit = Vec.Sub(pageCenter, pit)
+				const dist = deltaToPit.len()
+				if (dist < min) {
+					snappedToPit = true
+					min = dist
+					offset = deltaToPit
+				}
+			}
+
+			delta.sub(offset)
+		}
 	}
 
 	const averageSnappedPoint = Vec.Add(averagePagePoint, delta)
 
-	if (isGridMode && !inputs.ctrlKey) {
+	// we don't want to snap to the grid if we're holding the ctrl key, if we've already snapped into a pit, or if we're showing snapping indicators
+	const snapIndicators = editor.snaps.getIndicators()
+	if (isGridMode && !inputs.ctrlKey && !snappedToPit && snapIndicators.length === 0) {
 		averageSnappedPoint.snapToGrid(gridSize)
 	}
 
@@ -415,8 +510,9 @@ export function moveShapesToPoint({
 
 	editor.updateShapes(
 		compact(
-			snapshots.map(({ shape, pagePoint, parentTransform }): TLShapePartial | null => {
+			shapeSnapshots.map(({ shape, pagePoint, parentTransform }): TLShapePartial | null => {
 				const newPagePoint = Vec.Add(pagePoint, averageSnap)
+
 				const newLocalPoint = parentTransform
 					? Mat.applyToPoint(parentTransform, newPagePoint)
 					: newPagePoint
@@ -428,7 +524,6 @@ export function moveShapesToPoint({
 					y: newLocalPoint.y,
 				}
 			})
-		),
-		{ squashing: true }
+		)
 	)
 }

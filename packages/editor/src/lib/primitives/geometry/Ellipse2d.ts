@@ -1,6 +1,6 @@
 import { Box } from '../Box'
 import { Vec } from '../Vec'
-import { PI, PI2 } from '../utils'
+import { PI, PI2, perimeterOfEllipse } from '../utils'
 import { Edge2d } from './Edge2d'
 import { Geometry2d, Geometry2dOptions } from './Geometry2d'
 import { getVerticesCountForLength } from './geometry-constants'
@@ -76,24 +76,43 @@ export class Ellipse2d extends Geometry2d {
 	nearestPoint(A: Vec): Vec {
 		let nearest: Vec | undefined
 		let dist = Infinity
+		let d: number
+		let p: Vec
 		for (const edge of this.edges) {
-			const p = edge.nearestPoint(A)
-			const d = p.dist(A)
+			p = edge.nearestPoint(A)
+			d = Vec.Dist2(p, A)
 			if (d < dist) {
 				nearest = p
 				dist = d
 			}
 		}
-
 		if (!nearest) throw Error('nearest point not found')
 		return nearest
 	}
 
-	hitTestLineSegment(A: Vec, B: Vec, zoom: number): boolean {
-		return this.edges.some((edge) => edge.hitTestLineSegment(A, B, zoom))
+	hitTestLineSegment(A: Vec, B: Vec): boolean {
+		return this.edges.some((edge) => edge.hitTestLineSegment(A, B))
 	}
 
 	getBounds() {
 		return new Box(0, 0, this.w, this.h)
+	}
+
+	getLength(): number {
+		const { w, h } = this
+		const cx = w / 2
+		const cy = h / 2
+		const rx = Math.max(0, cx)
+		const ry = Math.max(0, cy)
+		return perimeterOfEllipse(rx, ry)
+	}
+
+	getSvgPathData(first = false) {
+		const { w, h } = this
+		const cx = w / 2
+		const cy = h / 2
+		const rx = Math.max(0, cx)
+		const ry = Math.max(0, cy)
+		return `${first ? `M${cx - rx},${cy}` : ``} a${rx},${ry},0,1,1,${rx * 2},0a${rx},${ry},0,1,1,-${rx * 2},0`
 	}
 }
