@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - 'c211-i77118-*'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
 permissions:
   id-token: write
   contents: read
